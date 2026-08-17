@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
 import json
 import os
 import sys
@@ -16,6 +15,7 @@ from .info import get_lvs_config_reference
 from .lvs import get_layout_file, get_top_layout, normalize_repo_path
 
 API_ROOT = "https://api.github.com"
+RAW_ROOT = "https://raw.githubusercontent.com"
 
 
 def github_headers() -> dict[str, str]:
@@ -35,23 +35,22 @@ def repo_default_branch(session: requests.Session, repo: str) -> str:
     return value
 
 
-def get_repo_file(session: requests.Session, repo: str, path: str, ref: str) -> bytes:
+def get_raw_repo_file(session: requests.Session, repo: str, path: str, ref: str) -> bytes:
     encoded = "/".join(quote(part, safe="") for part in path.lstrip("/").split("/"))
-    r = session.get(f"{API_ROOT}/repos/{repo}/contents/{encoded}", params={"ref": ref}, timeout=60)
+    encoded_ref = quote(ref, safe="")
+    r = session.get(f"{RAW_ROOT}/{repo}/{encoded_ref}/{encoded}", timeout=60)
     if r.status_code == 404:
         raise FileNotFoundError(f"{path} not found in {repo}@{ref}")
     r.raise_for_status()
-    data = r.json()
-    if not isinstance(data, dict) or data.get("type") != "file":
-        raise ConfigError(f"{repo}:{path} is not a regular file")
-    if data.get("encoding") == "base64" and isinstance(data.get("content"), str):
-        return base64.b64decode(data["content"])
-    download_url = data.get("download_url")
-    if isinstance(download_url, str):
-        rr = session.get(download_url, timeout=60)
-        rr.raise_for_status()
-        return rr.content
-    raise ConfigError(f"GitHub did not return content for {repo}:{path}")
+    return r.content
+
+
+def get_ref_and_info(session: requests.Session, repo: str) -> tuple[str, bytes]:
+    try:
+        return "main", get_raw_repo_file(session, repo, "info.yaml", "main")
+    except FileNotFoundError:
+        ref = repo_default_branch(session, repo)
+        return ref, get_raw_repo_file(session, repo, "info.yaml", ref)
 
 
 def parse_info_bytes(data: bytes) -> tuple[dict, str]:
@@ -90,9 +89,8 @@ def process_team(
         print(f"ERROR: Unknown repo for {team}", file=sys.stderr)
         return False
     try:
-        ref = repo_default_branch(session, repo)
+        ref, info_data = get_ref_and_info(session, repo)
         print(f"  ref:          {ref}")
-        info_data = get_repo_file(session, repo, "info.yaml", ref)
         info, lvs_path = parse_info_bytes(info_data)
         info_file = info_dir / f"{team}_info.yaml"
         if overwrite or not info_file.exists():
@@ -102,12 +100,12 @@ def process_team(
         print(f"  info.yaml:    {info_file}")
         print(f"  lvs_config:   {lvs_path}")
 
-        lvs_data = get_repo_file(session, repo, lvs_path, ref)
+        lvs_data = get_raw_repo_file(session, repo, lvs_path, ref)
         top_layout, layout_path = parse_lvs_bytes(lvs_data)
         print(f"  TOP_LAYOUT:   {top_layout}")
         print(f"  LAYOUT_FILE:  {layout_path}")
 
-        gds_data = get_repo_file(session, repo, layout_path, ref)
+        gds_data = get_raw_repo_file(session, repo, layout_path, ref)
         team_dir = gds_dir / team
         team_dir.mkdir(parents=True, exist_ok=True)
         gds_file = team_dir / Path(layout_path).name
