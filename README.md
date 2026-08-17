@@ -1,4 +1,11 @@
 # PADRING - a padring generator for ASICs
+
+This repo also includes the specifications and programs used to create def files for chipathon2026 projects based on their individual pin allocations.
+
+See specs.md, the input to ChatGPT.
+
+
+Based on
 [![Build Status](http://api.cirrus-ci.com/github/YosysHQ/padring.svg)](https://cirrus-ci.com/github/YosysHQ/padring)
 
 ![](doc/padring.png)

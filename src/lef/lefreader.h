@@ -24,6 +24,7 @@
 #include<vector>
 #include<string>
 #include<iostream>
+#include<sstream>
 #include<regex>
 
 #include "../linereader.h"
