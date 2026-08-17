@@ -1,0 +1,24 @@
+from pathlib import Path
+
+from chipathon2026_integration.padring_runner import build_padring_command, required_lef_paths
+
+
+def test_required_lefs_include_all_current_cells(tmp_path):
+    paths = required_lef_paths(tmp_path)
+    names = {p.name for p in paths}
+    assert "gf180mcu_fd_io__bi_24t.lef" in names
+    assert "gf180mcu_fd_io__in_c.lef" in names
+    assert "gf180mcu_fd_io__in_s.lef" in names
+    assert "gf180mcu_fd_io__dvdd.lef" in names
+    assert "gf180mcu_fd_io__dvss.lef" in names
+    assert len(paths) == 9
+
+
+def test_command_shape(tmp_path):
+    cmd = build_padring_command(
+        padring_exe=Path("/bin/padring"), tech_pdk=tmp_path, cfg=Path("ring.cfg"),
+        output_def=Path("ring.def"), output_svg=Path("ring.svg")
+    )
+    assert cmd[0] == "/bin/padring"
+    assert cmd.count("--lef") == 9
+    assert cmd[-1] == "ring.cfg"

@@ -1,0 +1,14 @@
+# GF180 I/O LEFs required by the current ChatGPT_spec.md io_type map.
+PADRING_LEFS := \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__cor.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__fill1.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__bi_t.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__bi_24t.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__in_c.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__in_s.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__asig_5p0.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__dvdd.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__dvss.lef
+
+# Example:
+# $(BIN_DIR)/padring -v $(PADRING_LEFS) --svg $(SVG) --def $(DEF) $(CFG) | tee $(LOG)

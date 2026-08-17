@@ -1,0 +1,17 @@
+project:
+  title: Example Project
+  team: Example Team
+  description: Example Chipathon 2026 project.
+  lvs_config: lvs_config.json
+pins:
+  - name: reset_n
+    io_type: input_cmos
+  - name: clock
+    io_type: input_schmitt
+  - name: gpio0
+    io_type: bidirectional
+  - name: high_drive_gpio
+    io_type: bidirectional_24ma
+  - name: "sensor[0]"
+    io_type: analog
+    secondary_esd: true

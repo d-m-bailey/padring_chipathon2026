@@ -1,0 +1,5 @@
+{
+  "TOP_SOURCE": "example_top",
+  "TOP_LAYOUT": "$TOP_SOURCE",
+  "LAYOUT_FILE": "$UPRJ_ROOT/gds/$TOP_SOURCE.gds"
+}
