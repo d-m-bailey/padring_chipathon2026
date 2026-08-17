@@ -13,7 +13,7 @@ import yaml
 
 from .errors import ConfigError
 from .info import get_lvs_config_reference
-from .lvs import get_layout_file, normalize_repo_path
+from .lvs import get_layout_file, get_top_layout, normalize_repo_path
 
 API_ROOT = "https://api.github.com"
 
@@ -64,14 +64,17 @@ def parse_info_bytes(data: bytes) -> tuple[dict, str]:
     return info, normalize_repo_path(get_lvs_config_reference(info))
 
 
-def parse_lvs_bytes(data: bytes) -> str:
+def parse_lvs_bytes(data: bytes) -> tuple[str, str]:
     try:
         config = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ConfigError(f"malformed lvs_config.json: {exc}") from exc
     if not isinstance(config, dict):
         raise ConfigError("lvs_config.json top level must be an object")
-    return normalize_repo_path(get_layout_file(config))
+    top_layout = get_top_layout(config)
+    if top_layout is None:
+        raise ConfigError("lvs_config.json does not contain a valid TOP_LAYOUT string")
+    return top_layout, normalize_repo_path(get_layout_file(config))
 
 
 def process_team(
@@ -83,6 +86,9 @@ def process_team(
     overwrite: bool,
 ) -> bool:
     print(f"{team}: {repo}")
+    if repo == "???":
+        print(f"ERROR: Unknown repo for {team}", file=sys.stderr)
+        return False
     try:
         ref = repo_default_branch(session, repo)
         print(f"  ref:          {ref}")
@@ -97,7 +103,8 @@ def process_team(
         print(f"  lvs_config:   {lvs_path}")
 
         lvs_data = get_repo_file(session, repo, lvs_path, ref)
-        layout_path = parse_lvs_bytes(lvs_data)
+        top_layout, layout_path = parse_lvs_bytes(lvs_data)
+        print(f"  TOP_LAYOUT:   {top_layout}")
         print(f"  LAYOUT_FILE:  {layout_path}")
 
         gds_data = get_repo_file(session, repo, layout_path, ref)
