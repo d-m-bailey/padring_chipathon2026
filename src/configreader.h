@@ -117,6 +117,16 @@ public:
         std::cout << "Filler prefix:" << fillerName << "\n";
     }
 
+    virtual void onBreakFiller(const std::string &fillerName)
+    {
+        std::cout << "Break filler prefix:" << fillerName << "\n";
+    }
+
+    virtual void onBreak()
+    {
+        std::cout << "Break\n";
+    }
+
     /** callback for space in microns */
     virtual void onSpace(double space)
     {
@@ -157,6 +167,8 @@ protected:
     bool parseSpace();
     bool parseOffset();
     bool parseFiller();
+    bool parseBreakFiller();
+    bool parseBreak();
     bool parseDesignName();
 
     token_t      tokenize(std::string &tokstr);
@@ -171,5 +183,4 @@ protected:
 
 
 #endif
-
 

@@ -170,6 +170,26 @@ public:
         m_fillerPrefix = filler;
     }
 
+    virtual void onBreakFiller(const std::string &filler) override
+    {
+        m_breakFillerPrefix = filler;
+    }
+
+    virtual void onBreak() override
+    {
+        LayoutItem *item = new LayoutItem(LayoutItem::TYPE_FLEXSPACE);
+        item->m_size = -1;
+        item->m_fillerPrefix = m_breakFillerPrefix;
+        item->m_useBreakFiller = true;
+        m_hasBreaks = true;
+
+        if (m_lastLocation == "N") m_north.addItem(item);
+        else if (m_lastLocation == "W") m_west.addItem(item);
+        else if (m_lastLocation == "S") m_south.addItem(item);
+        else if (m_lastLocation == "E") m_east.addItem(item);
+        else doLog(LOG_ERROR, "BREAK must follow a PAD\n");
+    }
+
     /** callback for space in microns */
     virtual void onSpace(double space) override
     {
@@ -225,6 +245,8 @@ public:
     std::string m_designName;
 
     std::string m_fillerPrefix;
+    std::string m_breakFillerPrefix;
+    bool m_hasBreaks = false;
     std::string m_lastLocation;
 
     PRLEFReader m_lefreader;

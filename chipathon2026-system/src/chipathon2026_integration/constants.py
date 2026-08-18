@@ -21,6 +21,10 @@ IO_CELLS = {
 ANALOG_PLACEHOLDER_CELL = "gf180mcu_fd_io__asig_5p0"
 POWER_CELL = "gf180mcu_fd_io__dvdd"
 GROUND_CELL = "gf180mcu_fd_io__dvss"
+BREAK_CELL = "gf180mcu_fd_io__brk5"
+REQUIRED_TEMPLATE_BREAKS = {
+    "BRK_W10_W11", "BRK_W12_W13", "BRK_E10_E11", "BRK_E12_E13",
+}
 
 # The explicit list in section 14 is authoritative.  The prose sentence that
 # still says L13 is intentionally not used.

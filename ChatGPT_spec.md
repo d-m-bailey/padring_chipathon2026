@@ -283,6 +283,47 @@ but the final polarity/order must be explicitly defined in the padframe template
 
 These cells are owned by the integration template and must not be replaced when translating user pins.
 
+The fixed middle power/ground pair on each vertical edge must be isolated with
+gf180mcu\_fd\_io\_\_brk5 cells at these four boundaries:
+
+* between W10 and W11;
+* between W12 and W13;
+* between E10 and E11;
+* between E12 and E13.
+
+These four invariant break cells belong in the physical padring template because
+their positions do not depend on participant data.
+
+Additional gf180mcu\_fd\_io\_\_brk5 cells are generated dynamically:
+
+* immediately after the final I/O pad allocated to each project;
+* immediately before the second and every subsequent power pad belonging to a
+  single project.
+
+Dynamic break placement belongs in the template-transformation logic because
+project length and participant power-pad count come from info.yaml. A break cell
+is auxiliary physical geometry: it is not one of the 88 immutable I/O slots, it
+does not consume a participant pin, and it must not appear in the pad-center CSV.
+
+At every fixed or dynamic break boundary, `brk5` replaces all `fill5` filler
+cells in that gap; it is not added alongside them. The padring configuration
+language provides separate default filler families and a parameterless break
+directive. The resulting sequence is conceptually:
+
+```text
+FILLER gf180mcu_fd_io__fill5 ;
+BREAKFILLER gf180mcu_fd_io__brk5 ;
+
+PAD <preceding-io> ... ;
+BREAK ;
+PAD <following-io> ... ;
+```
+
+`BREAK ;` preserves the ordinary automatically calculated gap width but fills
+the complete gap using only the `BREAKFILLER` family. It must not introduce an
+additional cell or fixed space, and no default `FILLER` cell may occur in that
+gap. For example, a 25-micron gap uses five `brk5` cells.
+
 # **12\. Quadrant placement**
 
 Projects are placed in die quadrants.
@@ -428,7 +469,7 @@ The converter should:
 
 5\. Replace the cell type at those positions.
 
-6\. Replace the pad instance name with a name based on the user's pin.
+6\. Keep the pad instance name equal to its canonical physical slot name.
 
 7\. Leave all unrelated padframe cells untouched.
 
@@ -449,9 +490,9 @@ For a production template, "unrelated" fixed PAD entries means the immutable
 slots outside the selected project block. Unexpected legacy PAD instance names
 are an error because they add physical pads beyond the canonical 88 positions.
 
-# **17\. Physical slots versus pad instance names**
+# **17\. Canonical padring names and project names**
 
-The physical slot identity and the generated PAD instance name are different concepts.
+The physical slot identity is also the canonical padring PAD instance name.
 
 Example:
 
@@ -459,38 +500,33 @@ physical slot: W13
 user pin:      reset\_n  
 cell:          gf180mcu\_fd\_io\_\_in\_s
 
-The generated padring directive may be:
+The generated padring directive is:
 
-PAD reset\_n W gf180mcu\_fd\_io\_\_in\_s ;
+PAD W13 W gf180mcu\_fd\_io\_\_in\_s ;
 
 while the integration metadata records:
 
 slot: W13  
-pin: reset\_n  
+instance: W13
+pin\_name: reset\_n
 cell: gf180mcu\_fd\_io\_\_in\_s
 
-This mapping should be retained because the padring file itself does not preserve the original physical-slot identifier after the instance is renamed.
+The padring DEF, GDS, and Verilog use canonical names. Team-code prefixes and
+participant pad names are applied only when the padring and projects are
+instantiated in the future top-level design. The pad-center CSV reports the
+intended top-level project pin name, including its team-code prefix, as mapping
+metadata; this does not rename objects inside the padring layout.
 
-# **18\. Pin-name conversion for padring instances**
+# **18\. User-area-facing pin names**
 
-User HDL-style names may contain characters unsuitable or inconvenient for padring instance names.
+Each project-facing I/O-cell terminal in the padring DEF and Verilog is named
+`<canonical-pad>_<cell-terminal>`, for example `W01_A` or `W01_Y`. The DEF PINS
+geometry is derived from the corresponding transformed LEF pin rectangles so
+that the same named terminals exist in the generated layout.
 
-Example:
-
-name: "data\[7\]"
-
-The physical PAD instance may therefore be sanitized:
-
-data\_7
-
-while metadata retains:
-
-pin\_name: "data\[7\]"  
-instance: data\_7
-
-The generator must detect collisions caused by sanitization.
-
-For example, data\[7\] and data\_7 must not silently become two instances named data\_7.
+The corresponding pin in a user project DEF is named
+`<project-pin-name>_<cell-terminal>`, for example `RST_A`. Names are sanitized
+for DEF/Verilog identifiers and collisions after sanitization are errors.
 
 # **19\. Unused project slots**
 
@@ -500,7 +536,7 @@ gf180mcu\_fd\_io\_\_asig\_5p0
 
 Example:
 
-PAD unused\_L18 W gf180mcu\_fd\_io\_\_asig\_5p0 ;
+PAD W18 W gf180mcu\_fd\_io\_\_asig\_5p0 ;
 
 These placeholder analog cells:
 
@@ -530,6 +566,7 @@ At minimum, based on the current pin types:
 
 gf180mcu\_fd\_io\_\_cor.lef  
 gf180mcu\_fd\_io\_\_fill5.lef
+gf180mcu\_fd\_io\_\_brk5.lef
 gf180mcu\_fd\_io\_\_bi\_t.lef  
 gf180mcu\_fd\_io\_\_bi\_24t.lef  
 gf180mcu\_fd\_io\_\_in\_c.lef  
@@ -542,6 +579,7 @@ A Makefile invocation therefore needs entries such as:
 
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_cor.lef \\  
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_fill5.lef \\
+\--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_brk5.lef \\
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_bi\_t.lef \\  
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_bi\_24t.lef \\  
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_in\_c.lef \\  
@@ -557,6 +595,7 @@ Current style:
 $(BIN\_DIR)/padring \-v \\  
     \--lef .../gf180mcu\_fd\_io\_\_cor.lef \\  
     \--lef .../gf180mcu\_fd\_io\_\_fill5.lef \\
+    \--lef .../gf180mcu\_fd\_io\_\_brk5.lef \\
     \--lef .../gf180mcu\_fd\_io\_\_bi\_t.lef \\  
     \--lef .../gf180mcu\_fd\_io\_\_asig\_5p0.lef \\  
     \--lef .../gf180mcu\_fd\_io\_\_dvdd.lef \\  
@@ -579,19 +618,19 @@ pads:
   \- pin\_index: 0  
     pin\_name: reset\_n  
     slot: W13  
-    instance: reset\_n  
+    instance: W13
     io\_type: input\_schmitt  
     cell: gf180mcu\_fd\_io\_\_in\_s
 
   \- pin\_index: 1  
     pin\_name: "data\[7\]"  
     slot: W14  
-    instance: data\_7  
+    instance: W14
     io\_type: bidirectional  
     cell: gf180mcu\_fd\_io\_\_bi\_t
 
   \- slot: W20  
-    instance: unused\_W20  
+    instance: W20
     generated: true  
     cell: gf180mcu\_fd\_io\_\_asig\_5p0
 
@@ -609,6 +648,12 @@ project virtual-padframe DEF
       ↓  
 final chip integration
 
+Both YAML and JSON serializations may be generated. The JSON form is used by
+the KLayout conversion stage without requiring a YAML package in KLayout's
+embedded Python environment.
+The mapping records the team code supplied by the project-ID Make target so
+downstream outputs can construct globally unique project pin names.
+
 # **24\. Generated project DEF / virtual padframe**
 
 The project DEF is not merely documentation.
@@ -624,6 +669,10 @@ Therefore, when the completed block is inserted into the final chip:
 * project-side interfaces already align;  
 * no project I/O rerouting should be necessary;  
 * placement transformation is deterministic.
+
+Project DEF pins use the participant's pin name followed by one underscore and
+the I/O-cell terminal name, such as `RST_A`. The mapping metadata for every
+such pin also records its canonical padring slot.
 
 The canonical DEF should initially represent the project as if it were placed in the canonical upper-left location.
 
@@ -716,6 +765,7 @@ The converter should reject:
 * collisions after pin-name sanitization;  
 * missing physical slots in the padring template;  
 * unexpected legacy PAD instances in a production template;
+* missing or misplaced fixed brk5 cells around W11/W12 and E11/E12;
 * missing required cell mappings.
 
 It should also verify that every physical project slot is accounted for as one of:
@@ -799,6 +849,7 @@ The default project output directory is build/padframes/A01 and contains:
 ```text
 A01_padring.cfg
 A01_pad_map.yaml
+A01_pad_map.json
 A01_padring.def
 A01_padring.svg
 A01_padring.v
@@ -806,18 +857,23 @@ A01_padring.gds
 A01_pads.csv
 ```
 
-The Verilog output is a structural padring module containing one cell instance
-for each non-filler PAD entry.
+The Verilog output is a structural padring module whose I/O-cell instances use
+canonical physical-slot names. It exposes the project-facing cell terminals as
+module ports named `<canonical-pad>_<cell-terminal>`. Break, filler, corner,
+and unused placeholder cells do not create module ports.
 
 The pad CSV format is:
 
-name,type,x,y
+canonical_pin_name,project_pin_name,type,x,y
 
-name is the PAD instance name. type is the I/O macro name. x and y are micron
+canonical_pin_name is the canonical slot such as W01. For an allocated
+participant pad, project_pin_name is the original project pin name prefixed by
+the team code, for example A01_RST. It is empty for pads not allocated to that
+project. type is the I/O macro name. x and y are micron
 coordinates at the center of the single square on the configured GDS marker
 layer/datatype pair (37/0 by default for GF180), within that I/O macro after
 applying the DEF instance placement and orientation. The CSV coordinates must be derived from the source I/O GDS
-geometry, not from the LEF macro bounding box. Filler and corner instances are
+geometry, not from the LEF macro bounding box. Break, filler, and corner instances are
 excluded. The configured marker layer/datatype must be searched recursively through the complete I/O
 macro hierarchy. The search must virtually flatten and merge the recursive
 geometry in macro-local coordinates before selecting the square and applying

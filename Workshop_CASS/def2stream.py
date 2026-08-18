@@ -87,7 +87,7 @@ def transform_point(x, y, width, height, orientation):
     return transforms[orientation](x, y)
 
 
-def write_pad_centers(layout, def_path, lef_paths, output_path, layer, datatype):
+def write_pad_centers(layout, def_path, lef_paths, output_path, layer, datatype, mapping_path=None):
     global errors
     layer_index = layout.find_layer(pya.LayerInfo(layer, datatype))
     if layer_index is None or layer_index < 0:
@@ -96,13 +96,26 @@ def write_pad_centers(layout, def_path, lef_paths, output_path, layer, datatype)
         return
 
     centers = {}
+    project_names = {}
+    team_code = ""
+    if mapping_path:
+        with open(mapping_path, "r") as stream:
+            mapping = json.load(stream)
+        project_names = {
+            pad["slot"]: pad["pin_name"]
+            for pad in mapping.get("pads", [])
+            if isinstance(pad, dict) and not pad.get("generated")
+        }
+        team_code = mapping.get("team_code", "")
+        if project_names and not team_code:
+            raise ValueError("pad mapping is missing team_code")
     sizes = read_lef_sizes(lef_paths)
     components = read_def_components(def_path)
     with open(output_path, "w", newline="") as stream:
         writer = csv.writer(stream)
-        writer.writerow(("name", "type", "x", "y"))
+        writer.writerow(("canonical_pin_name", "project_pin_name", "type", "x", "y"))
         for name, cell_name, place_x, place_y, orientation in components:
-            if name.startswith("FILLER_") or cell_name.endswith("__cor"):
+            if name.startswith("FILLER_") or cell_name.endswith(("__cor", "__brk5")):
                 continue
 
             if cell_name not in centers:
@@ -141,7 +154,9 @@ def write_pad_centers(layout, def_path, lef_paths, output_path, layer, datatype)
             offset_x, offset_y = transform_point(
                 center[0], center[1], width, height, orientation
             )
-            writer.writerow((name, cell_name, place_x + offset_x, place_y + offset_y))
+            project_name = project_names.get(name)
+            qualified_name = "%s_%s" % (team_code, project_name) if project_name else ""
+            writer.writerow((name, qualified_name, cell_name, place_x + offset_x, place_y + offset_y))
 
 # Load technology file
 tech = pya.Technology()
@@ -189,6 +204,7 @@ if "csv_file" in globals() and csv_file:
         csv_file,
         int(marker_layer) if "marker_layer" in globals() else 37,
         int(marker_datatype) if "marker_datatype" in globals() else 0,
+        mapping_file if "mapping_file" in globals() and mapping_file else None,
     )
 
 # Copy the top level only to a new layout

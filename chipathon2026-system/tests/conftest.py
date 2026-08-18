@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from chipathon2026_integration.constants import ALL_PHYSICAL_SLOTS, GROUND_CELL, POWER_CELL
+from chipathon2026_integration.constants import GROUND_CELL, POWER_CELL
 
 
 @pytest.fixture
@@ -16,10 +16,10 @@ def full_template(tmp_path: Path) -> Path:
         "CORNER C2 SW gf180mcu_fd_io__cor ;",
         "CORNER C3 NE gf180mcu_fd_io__cor ;",
         "CORNER C4 NW gf180mcu_fd_io__cor ;",
-        "FILLER gf180mcu_fd_io__fill1 ;",
+        "FILLER gf180mcu_fd_io__fill5 ;",
+        "BREAKFILLER gf180mcu_fd_io__brk5 ;",
     ]
     for side in "NESW":
-        lines.append(f"LOC {side} ;")
         for n in range(1, 23):
             slot = f"{side}{n:02d}"
             cell = "gf180mcu_fd_io__asig_5p0"
@@ -30,6 +30,12 @@ def full_template(tmp_path: Path) -> Path:
             flip = " FLIP" if slot == "W14" else ""
             comment = " # keep me" if slot == "W15" else ""
             lines.append(f"PAD {slot} {side}{flip} {cell} ;{comment}")
+            break_name = {
+                "W10": "BRK_W10_W11", "W12": "BRK_W12_W13",
+                "E10": "BRK_E10_E11", "E12": "BRK_E12_E13",
+            }.get(slot)
+            if break_name:
+                lines.append("BREAK ;")
     path = tmp_path / "physical.cfg"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

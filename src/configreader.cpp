@@ -240,7 +240,15 @@ bool ConfigReader::parse(std::istream &configstream)
                 else if (tokstr == "FILLER")
                 {
                     if (!parseFiller()) return false;
-                }                
+                }
+                else if (tokstr == "BREAKFILLER")
+                {
+                    if (!parseBreakFiller()) return false;
+                }
+                else if (tokstr == "BREAK")
+                {
+                    if (!parseBreak()) return false;
+                }
                 else if (tokstr == "OFFSET")
                 {
                     if (!parseOffset()) return false;
@@ -577,6 +585,39 @@ bool ConfigReader::parseFiller()
     }
 
     onFiller(fillerName);
+    return true;
+}
+
+bool ConfigReader::parseBreakFiller()
+{
+    std::string tokstr;
+    std::string fillerName;
+    ConfigReader::token_t tok = tokenize(fillerName);
+    if (tok != TOK_IDENT)
+    {
+        error("Expected a break filler cell prefix\n");
+        return false;
+    }
+    tok = tokenize(tokstr);
+    if (tok != TOK_SEMICOL)
+    {
+        error("Expected ;\n");
+        return false;
+    }
+    onBreakFiller(fillerName);
+    return true;
+}
+
+bool ConfigReader::parseBreak()
+{
+    std::string tokstr;
+    ConfigReader::token_t tok = tokenize(tokstr);
+    if (tok != TOK_SEMICOL)
+    {
+        error("Expected ;\n");
+        return false;
+    }
+    onBreak();
     return true;
 }
 

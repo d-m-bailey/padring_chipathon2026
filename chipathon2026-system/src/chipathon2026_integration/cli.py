@@ -47,7 +47,9 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("template_cfg", type=Path)
     s.add_argument("-o", "--output", type=Path, required=True)
     s.add_argument("--map-out", type=Path, required=True)
+    s.add_argument("--map-json-out", type=Path)
     s.add_argument("--block", default="A")
+    s.add_argument("--team-code", required=True)
     s.add_argument("--allow-partial-template", action="store_true", help="testing only: do not require all 88 immutable slots")
 
     s = sub.add_parser("padring-command", help="print the exact padring invocation")
@@ -57,6 +59,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--def-out", type=Path, required=True)
     s.add_argument("--svg-out", type=Path)
     s.add_argument("--verilog-out", type=Path)
+    s.add_argument("--mapping", type=Path)
     s.add_argument("--def-dbu", type=float, default=0.005)
 
     s = sub.add_parser("run-padring", help="run YosysHQ padring with all required GF180 LEFs")
@@ -66,6 +69,7 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--def-out", type=Path, required=True)
     s.add_argument("--svg-out", type=Path)
     s.add_argument("--verilog-out", type=Path)
+    s.add_argument("--mapping", type=Path)
     s.add_argument("--def-dbu", type=float, default=0.005)
 
     s = sub.add_parser("inspect-lef", help="inspect/validate project-facing GF180 terminals in LEFs")
@@ -121,13 +125,19 @@ def main(argv: list[str] | None = None) -> int:
                 info_path=args.info_yaml,
                 template_path=args.template_cfg,
                 block=args.block,
+                team_code=args.team_code,
                 require_complete_template=not args.allow_partial_template,
             )
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(cfg, encoding="utf-8")
             write_mapping(args.map_out, mapping)
+            if args.map_json_out is not None:
+                args.map_json_out.parent.mkdir(parents=True, exist_ok=True)
+                args.map_json_out.write_text(json.dumps(mapping, indent=2) + "\n", encoding="utf-8")
             print(f"Wrote padring config: {args.output}")
             print(f"Wrote pad mapping:    {args.map_out}")
+            if args.map_json_out is not None:
+                print(f"Wrote JSON mapping:   {args.map_json_out}")
             return 0
 
         if args.command in {"padring-command", "run-padring"}:
@@ -138,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
                 output_def=args.def_out,
                 output_svg=args.svg_out,
                 output_verilog=args.verilog_out,
+                mapping_path=args.mapping,
                 def_dbu=args.def_dbu,
             )
             if args.command == "padring-command":

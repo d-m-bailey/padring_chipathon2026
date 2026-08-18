@@ -33,13 +33,16 @@ def test_generate_a_mapping_preserves_flip_and_comment(full_template, minimal_in
         info=minimal_info,
         info_path=tmp_path / "info.yaml",
         template_path=full_template,
+        team_code="A01",
     )
     assert mapping["pads"][0]["slot"] == "W13"
-    assert mapping["pads"][0]["instance"] == "reset_n"
+    assert mapping["team_code"] == "A01"
+    assert mapping["pads"][0]["instance"] == "W13"
     assert mapping["pads"][1]["slot"] == "W14"
-    assert "PAD data_7 W FLIP gf180mcu_fd_io__bi_t ;" in cfg
-    assert "PAD ain W gf180mcu_fd_io__asig_5p0 ; # keep me" in cfg
-    assert "PAD unused_W16 W gf180mcu_fd_io__asig_5p0 ;" in cfg
+    assert "PAD W14 W FLIP gf180mcu_fd_io__bi_t ;" in cfg
+    assert "PAD W15 W gf180mcu_fd_io__asig_5p0 ; # keep me" in cfg
+    assert "PAD W16 W gf180mcu_fd_io__asig_5p0 ;" in cfg
+    assert "PAD W15 W gf180mcu_fd_io__asig_5p0 ; # keep me\nBREAK ;" in cfg
     assert "PAD W11 W gf180mcu_fd_io__dvdd ;" in cfg
     assert "PAD W12 W gf180mcu_fd_io__dvss ;" in cfg
 
@@ -50,18 +53,35 @@ def test_production_template_uses_supported_padring_directives(minimal_info, tmp
         info=minimal_info,
         info_path=tmp_path / "info.yaml",
         template_path=template,
+        team_code="A01",
     )
 
     assert not any(line.lstrip().startswith("LOC ") for line in cfg.splitlines())
 
 
-def test_sanitization_collision(full_template, minimal_info, tmp_path):
+def test_project_names_do_not_replace_canonical_instances(full_template, minimal_info, tmp_path):
     minimal_info["pins"] = [
         {"name": "data[7]", "io_type": "bidirectional"},
         {"name": "data_7", "io_type": "bidirectional"},
     ]
-    with pytest.raises(ConfigError, match="collides after sanitization"):
-        generate_padring_config(info=minimal_info, info_path=tmp_path/"i.yaml", template_path=full_template)
+    _cfg, mapping = generate_padring_config(
+        info=minimal_info, info_path=tmp_path/"i.yaml", template_path=full_template
+    )
+    assert [pad["instance"] for pad in mapping["pads"][:2]] == ["W13", "W14"]
+    assert [pad["pin_name"] for pad in mapping["pads"][:2]] == ["data[7]", "data_7"]
+
+
+def test_break_inserted_before_second_power_pad(full_template, minimal_info, tmp_path):
+    minimal_info["pins"] = [
+        {"name": "vdd1", "io_type": "power"},
+        {"name": "sig", "io_type": "input_cmos"},
+        {"name": "vdd2", "io_type": "power"},
+    ]
+    cfg, mapping = generate_padring_config(
+        info=minimal_info, info_path=tmp_path/"i.yaml", template_path=full_template
+    )
+    assert "BREAK ;\nPAD W15 W gf180mcu_fd_io__dvdd ; # keep me" in cfg
+    assert any(item["reason"] == "repeated_power" for item in mapping["breaks"])
 
 
 def test_too_many_a_pins(full_template, minimal_info, tmp_path):

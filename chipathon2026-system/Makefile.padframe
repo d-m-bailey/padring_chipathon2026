@@ -75,8 +75,10 @@ $(DEFAULT_PADRING): $(PADRING_SOURCES)
 	@mkdir -p $(OUTPUT_DIR)/$@
 	$(INTEGRATE) generate-padring $< $(TEMPLATE) \
 		--block A \
+		--team-code $@ \
 		--output $(OUTPUT_DIR)/$@/$@_padring.cfg \
-		--map-out $(OUTPUT_DIR)/$@/$@_pad_map.yaml
+		--map-out $(OUTPUT_DIR)/$@/$@_pad_map.yaml \
+		--map-json-out $(OUTPUT_DIR)/$@/$@_pad_map.json
 	$(INTEGRATE) run-padring \
 		--padring $(PADRING) \
 		--tech-pdk $(TECH_PDK) \
@@ -84,6 +86,7 @@ $(DEFAULT_PADRING): $(PADRING_SOURCES)
 		--def-out $(OUTPUT_DIR)/$@/$@_padring.def \
 		--def-dbu $(DEF_DBU) \
 		--svg-out $(OUTPUT_DIR)/$@/$@_padring.svg \
+		--mapping $(OUTPUT_DIR)/$@/$@_pad_map.yaml \
 		--verilog-out $(OUTPUT_DIR)/$@/$@_padring.v
 	$(KLAYOUT) -zz \
 		-rd design_name=$(DESIGN_NAME) \
@@ -96,6 +99,7 @@ $(DEFAULT_PADRING): $(PADRING_SOURCES)
 		-rd layer_map=$(LAYER_MAP) \
 		-rd output_dbu=$(DEF_DBU) \
 		-rd csv_file=$(OUTPUT_DIR)/$@/$@_pads.csv \
+		-rd mapping_file=$(OUTPUT_DIR)/$@/$@_pad_map.json \
 		-rd marker_layer=$(PAD_MARKER_LAYER) \
 		-rd marker_datatype=$(PAD_MARKER_DATATYPE) \
 		-r $(DEF2STREAM)

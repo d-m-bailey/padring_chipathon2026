@@ -51,8 +51,10 @@ is:
 chipathon-integrate generate-padring \
   info.yaml physical_88pad.cfg \
   --block A \
+  --team-code A01 \
   -o build/project_padring.cfg \
-  --map-out build/project_pad_map.yaml
+  --map-out build/project_pad_map.yaml \
+  --map-json-out build/project_pad_map.json
 ```
 
 Then invoke padring:
@@ -64,10 +66,22 @@ chipathon-integrate run-padring \
   --cfg build/project_padring.cfg \
   --def-out build/project_padring.def \
   --svg-out build/project_padring.svg \
+  --mapping build/project_pad_map.yaml \
   --verilog-out build/project_padring.v
 ```
 
-The `Makefile.padframe` GDS stage also writes a `name,type,x,y` CSV. Its
+Padring components retain canonical slot names such as `W01`. The generated
+DEF and Verilog expose user-area terminals such as `W01_A`; project virtual
+DEF terminals use the participant name instead, such as `RST_A`.
+
+The template selects `fill5` with `FILLER`, selects `brk5` with `BREAKFILLER`,
+and uses a parameterless `BREAK ;` between selected I/O cells. The normal gap
+width is preserved, but every filler cell in that gap is `brk5` rather than
+`fill5`.
+
+The `Makefile.padframe` GDS stage also writes a
+`canonical_pin_name,project_pin_name,type,x,y` CSV. Project pin names are
+prefixed by the team code, for example `A01_RST`. Its
 coordinates are the transformed center of the single square on GDS layer
 `37/0` in each I/O macro, in microns; they are not inferred from the LEF macro
 bounding box.

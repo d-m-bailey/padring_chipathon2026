@@ -154,6 +154,9 @@ bool Layout::doLayout()
         case LayoutItem::TYPE_FIXEDSPACE:
             pos += item->m_size;
             break;
+        case LayoutItem::TYPE_FILLER:
+            pos += item->m_size;
+            break;
         }
     }
 

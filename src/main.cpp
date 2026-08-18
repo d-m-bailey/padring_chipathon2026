@@ -25,7 +25,7 @@
 #include <iostream>
 #include <fstream>
 
-#define __PGMVERSION__ "0.02d"
+#define __PGMVERSION__ "0.02e"
 
 #include "logging.h"
 
@@ -122,26 +122,45 @@ int main(int argc, char *argv[])
     // if an explicit filler cell prefix was not given,
     // search the cell database for filler cells
     FillerHandler fillerHandler;
-    if (cmdresult.count("filler") == 0)
+    FillerHandler breakFillerHandler;
+    if (!padring.m_fillerPrefix.empty())
     {
         for(auto lefCell : padring.m_lefreader.m_cells)
         {
-            if (lefCell.second->m_isFiller) 
+            if (lefCell.first.rfind(padring.m_fillerPrefix, 0) == 0)
             {
                 fillerHandler.addFillerCell(lefCell.first, lefCell.second->m_sx);
             }
         }
     }
-    else
+    else if (cmdresult.count("filler") != 0)
     {
         // use the provided filler cell prefix to search for filler cells
+        auto &prefixes = cmdresult["filler"].as<std::vector<std::string> >();
+        for(auto prefix : prefixes)
+        {
+            for(auto lefCell : padring.m_lefreader.m_cells)
+            {
+                if (lefCell.first.rfind(prefix, 0) == 0)
+                    fillerHandler.addFillerCell(lefCell.first, lefCell.second->m_sx);
+            }
+        }
+    }
+    else
+    {
         for(auto lefCell : padring.m_lefreader.m_cells)
         {
-            // match prefix
-            if (lefCell.first.rfind(padring.m_fillerPrefix, 0) == 0) 
-            {
+            if (lefCell.second->m_isFiller)
                 fillerHandler.addFillerCell(lefCell.first, lefCell.second->m_sx);
-            }
+        }
+    }
+
+    if (!padring.m_breakFillerPrefix.empty())
+    {
+        for(auto lefCell : padring.m_lefreader.m_cells)
+        {
+            if (lefCell.first.rfind(padring.m_breakFillerPrefix, 0) == 0)
+                breakFillerHandler.addFillerCell(lefCell.first, lefCell.second->m_sx);
         }
     }
 
@@ -150,6 +169,16 @@ int main(int argc, char *argv[])
     if (fillerHandler.getCellCount() == 0)
     {
         doLog(LOG_ERROR, "Cannot proceed without filler cells. Please use the --filler option to explicitly specify a filler cell prefix\n");
+        exit(1);
+    }
+    if (padring.m_hasBreaks && padring.m_breakFillerPrefix.empty())
+    {
+        doLog(LOG_ERROR, "BREAK requires a BREAKFILLER cell prefix\n");
+        exit(1);
+    }
+    if (padring.m_hasBreaks && breakFillerHandler.getCellCount() == 0)
+    {
+        doLog(LOG_ERROR, "Cannot find any break filler cells matching %s\n", padring.m_breakFillerPrefix.c_str());
         exit(1);
     }
 
@@ -282,7 +311,8 @@ int main(int argc, char *argv[])
             while(space > 0)
             {
                 std::string cellName;
-                double width = fillerHandler.getFillerCell(space, cellName);
+                FillerHandler &activeFillers = item->m_useBreakFiller ? breakFillerHandler : fillerHandler;
+                double width = activeFillers.getFillerCell(space, cellName);
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);
@@ -325,7 +355,8 @@ int main(int argc, char *argv[])
             while(space > 0)
             {
                 std::string cellName;
-                double width = fillerHandler.getFillerCell(space, cellName);
+                FillerHandler &activeFillers = item->m_useBreakFiller ? breakFillerHandler : fillerHandler;
+                double width = activeFillers.getFillerCell(space, cellName);
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);
@@ -368,7 +399,8 @@ int main(int argc, char *argv[])
             while(space > 0)
             {
                 std::string cellName;
-                double width = fillerHandler.getFillerCell(space, cellName);
+                FillerHandler &activeFillers = item->m_useBreakFiller ? breakFillerHandler : fillerHandler;
+                double width = activeFillers.getFillerCell(space, cellName);
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);
@@ -411,7 +443,8 @@ int main(int argc, char *argv[])
             while(space > 0)
             {
                 std::string cellName;
-                double width = fillerHandler.getFillerCell(space, cellName);
+                FillerHandler &activeFillers = item->m_useBreakFiller ? breakFillerHandler : fillerHandler;
+                double width = activeFillers.getFillerCell(space, cellName);
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);

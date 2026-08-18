@@ -36,9 +36,9 @@ def _transform_point(x: float, y: float, w: float, h: float, orient: str) -> tup
         return w - x, y
     if orient == "FS":
         return x, h - y
-    if orient == "FW":
-        return h - y, w - x
     if orient == "FE":
+        return h - y, w - x
+    if orient == "FW":
         return y, x
     raise ConfigError(f"unsupported DEF orientation {orient!r}")
 
@@ -134,7 +134,7 @@ def generate_virtual_def(
             lef_pin = macro.pins[terminal]
             if not lef_pin.rects:
                 raise ConfigError(f"LEF macro {cell} pin {terminal} has no RECT geometry")
-            out_name = safe_identifier(f"{pin_name}__{terminal}")
+            out_name = safe_identifier(f"{pin_name}_{terminal}")
             if out_name in names:
                 raise ConfigError(f"duplicate generated project-interface pin name {out_name!r}")
             names.add(out_name)
@@ -143,6 +143,7 @@ def generate_virtual_def(
             pin_defs.append((out_name, direction, rects))
             interface.append({
                 "pin_name": pin_name,
+                "canonical_pad": pad.get("slot"),
                 "pad_instance": instance,
                 "cell": cell,
                 "cell_terminal": terminal,

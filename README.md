@@ -60,6 +60,17 @@ The following commands are available:
 
 Space between the I/O pads is distributed evenly unless a specific space between two pads is specified directly using the SPACE command.
 
+#### FILLER \<cell_prefix\> ;
+Selects the default filler-cell family.
+
+#### BREAKFILLER \<cell_prefix\> ;
+Selects the filler-cell family used for break gaps.
+
+#### BREAK ;
+Marks the ordinary flexible gap between the preceding and succeeding pads as a
+break gap. Its calculated width is unchanged, but the entire gap is filled
+using `BREAKFILLER` cells instead of `FILLER` cells.
+
 
 ## Building
 

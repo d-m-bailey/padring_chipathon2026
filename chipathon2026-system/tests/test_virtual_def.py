@@ -46,7 +46,7 @@ END gf180mcu_fd_io__in_c
 def setup_files(tmp_path: Path):
     mapping = {
         "pads": [
-            {"pin_index": 0, "pin_name": "reset_n", "slot": "W13", "instance": "reset_n", "io_type": "input_cmos", "cell": "gf180mcu_fd_io__in_c"}
+            {"pin_index": 0, "pin_name": "reset_n", "slot": "W13", "instance": "W13", "io_type": "input_cmos", "cell": "gf180mcu_fd_io__in_c"}
         ]
     }
     mp = tmp_path / "map.yaml"
@@ -58,7 +58,7 @@ DESIGN ring ;
 UNITS DISTANCE MICRONS 1000 ;
 DIEAREA ( 0 0 ) ( 100000 100000 ) ;
 COMPONENTS 1 ;
-- reset_n gf180mcu_fd_io__in_c + FIXED ( 10000 20000 ) N ;
+- W13 gf180mcu_fd_io__in_c + FIXED ( 10000 20000 ) N ;
 END COMPONENTS
 END DESIGN
 ''', encoding="utf-8")
@@ -82,10 +82,10 @@ def test_virtual_def_exposes_control_and_data_terminals(tmp_path):
         diearea=(0, 0, 50000, 50000),
     )
     assert "PINS 3 ;" in text
-    assert "reset_n__PU" in text
-    assert "reset_n__PD" in text
-    assert "reset_n__Y" in text
+    assert "reset_n_PU" in text
+    assert "reset_n_PD" in text
+    assert "reset_n_Y" in text
     # PU/PD are inputs to the I/O cell, hence outputs from the project.
-    assert any(p["project_pin"] == "reset_n__PU" and p["direction"] == "OUTPUT" for p in meta["pins"])
+    assert any(p["project_pin"] == "reset_n_PU" and p["direction"] == "OUTPUT" for p in meta["pins"])
     # Y is output from the I/O cell, hence input to the project.
-    assert any(p["project_pin"] == "reset_n__Y" and p["direction"] == "INPUT" for p in meta["pins"])
+    assert any(p["project_pin"] == "reset_n_Y" and p["direction"] == "INPUT" for p in meta["pins"])

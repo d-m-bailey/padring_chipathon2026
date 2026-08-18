@@ -41,7 +41,7 @@ public:
         m_ltype(ltype),
         m_size(-1),
         m_x(-1.0), m_y(-1.0),
-        m_flipped(false)
+        m_flipped(false), m_useBreakFiller(false)
     {        
     }
 
@@ -52,10 +52,12 @@ public:
     std::string m_instance; ///< instance name
     std::string m_cellname; ///< cell name
     std::string m_location; ///< location of cell
+    std::string m_fillerPrefix; ///< optional filler family for a space item
     double      m_size;     ///< size of the item (-1 if unknown)
     double      m_x;        ///< x-position of item (-1 if unknown)
     double      m_y;        ///< y-position of item (-1 if unknown)
     bool        m_flipped;  ///< when true, unplaced/unrotated cell is filled along y axis.
+    bool        m_useBreakFiller; ///< fill this space with the break filler family.
     LayoutItemType m_ltype;
 };
 

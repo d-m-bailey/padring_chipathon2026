@@ -14,6 +14,7 @@ from .constants import (
     GROUND_CELL,
     IO_CELLS,
     POWER_CELL,
+    REQUIRED_TEMPLATE_BREAKS,
     RESERVED_VERTICAL_POWER_GROUND_SLOTS,
     SPEC_BLOB_SHA,
     UNFINALIZED_BLOCKS,
@@ -71,12 +72,33 @@ def read_template(path: Path) -> tuple[str, list[str], list[PadEntry]]:
 
 
 def audit_physical_template(path: Path) -> dict[str, Any]:
-    _text, _lines, entries = read_template(path)
+    _text, lines, entries = read_template(path)
     by_name = {entry.instance: entry for entry in entries}
     immutable = {name for name in by_name if PHYSICAL_SLOT_RE.fullmatch(name)}
     missing = [slot for slot in ALL_PHYSICAL_SLOTS if slot not in immutable]
     extra = sorted(immutable - set(ALL_PHYSICAL_SLOTS))
     legacy = sorted(entry.instance for entry in entries if entry.instance not in immutable)
+    break_issues: list[str] = []
+    found_breaks: list[str] = []
+    expected_boundaries = {
+        "BRK_W10_W11": ("W10", "W11"), "BRK_W12_W13": ("W12", "W13"),
+        "BRK_E10_E11": ("E10", "E11"), "BRK_E12_E13": ("E12", "E13"),
+    }
+    for name, (before, after) in expected_boundaries.items():
+        if before in by_name and after in by_name:
+            between = lines[by_name[before].line_index + 1:by_name[after].line_index]
+            count = sum(line.strip() == "BREAK ;" for line in between)
+            if count == 1:
+                found_breaks.append(name)
+            else:
+                break_issues.append(f"{name} requires exactly one BREAK ; directive")
+    total_breaks = sum(line.strip() == "BREAK ;" for line in lines)
+    if total_breaks != len(REQUIRED_TEMPLATE_BREAKS):
+        break_issues.append(
+            f"template contains {total_breaks} BREAK directives; expected {len(REQUIRED_TEMPLATE_BREAKS)}"
+        )
+    if not any(line.strip().startswith("BREAKFILLER ") for line in lines):
+        break_issues.append("template is missing BREAKFILLER")
     side_mismatches = [
         slot for slot in immutable if by_name[slot].location != slot[0]
     ]
@@ -98,7 +120,9 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
         "side_mismatches": side_mismatches,
         "reserved_power_ground_issues": reserved_issues,
         "legacy_instance_names": legacy,
-        "valid_for_production": not missing and not extra and not legacy and not side_mismatches and not reserved_issues,
+        "break_boundaries": sorted(found_breaks),
+        "break_issues": break_issues,
+        "valid_for_production": not missing and not extra and not legacy and not break_issues and not side_mismatches and not reserved_issues,
     }
 
 
@@ -131,6 +155,7 @@ def generate_padring_config(
     info_path: Path,
     template_path: Path,
     block: str = "A",
+    team_code: str | None = None,
     require_complete_template: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     pins = validate_pins(info)
@@ -153,6 +178,8 @@ def generate_padring_config(
                 details.append(f"side mismatch: {audit['side_mismatches']}")
             if audit["legacy_instance_names"]:
                 details.append(f"unexpected PAD instances: {audit['legacy_instance_names']}")
+            if audit["break_issues"]:
+                details.append(f"missing or unexpected fixed breaks: {audit['break_issues']}")
             if audit["reserved_power_ground_issues"]:
                 details.extend(audit["reserved_power_ground_issues"])
             raise ConfigError(
@@ -178,7 +205,7 @@ def generate_padring_config(
                 cell = IO_CELLS[pin["io_type"]]
             except KeyError as exc:
                 raise ConfigError(f"missing required cell mapping for io_type {pin['io_type']!r}") from exc
-            instance = safe_identifier(pin["name"])
+            instance = slot_name
             if instance in generated_names:
                 raise ConfigError(
                     f"pin {pin['name']!r} collides after sanitization as {instance!r}"
@@ -200,7 +227,7 @@ def generate_padring_config(
                 entry["secondary_esd"] = pin["secondary_esd"]
         else:
             cell = ANALOG_PLACEHOLDER_CELL
-            instance = f"unused_{slot_name}"
+            instance = slot_name
             if instance in generated_names or instance in fixed_names:
                 raise ConfigError(f"generated placeholder name {instance!r} conflicts with another PAD instance")
             generated_names.add(instance)
@@ -214,6 +241,25 @@ def generate_padring_config(
         lines[slot.line_index] = _format_pad_line(lines[slot.line_index], instance, cell)
         mapping.append(entry)
 
+    break_entries: list[dict[str, str]] = []
+    insertions: list[tuple[int, list[str]]] = []
+    power_count = 0
+    for pin_index, pin in enumerate(pins):
+        slot = by_name[slots[pin_index]]
+        if pin["io_type"] == "power":
+            power_count += 1
+            if power_count > 1:
+                name = f"BRK_BEFORE_{slot.instance}"
+                insertions.append((slot.line_index, ["BREAK ;"]))
+                break_entries.append({"instance": name, "reason": "repeated_power", "before_slot": slot.instance})
+
+    last_slot = by_name[slots[len(pins) - 1]]
+    after_name = f"BRK_AFTER_{block.upper()}"
+    insertions.append((last_slot.line_index + 1, ["BREAK ;"]))
+    break_entries.append({"instance": after_name, "reason": "project_boundary", "after_slot": last_slot.instance})
+    for line_index, break_lines in sorted(insertions, reverse=True):
+        lines[line_index:line_index] = break_lines
+
     # Reserved template-owned positions must never be touched by the A mapping.
     if set(slots) & set(RESERVED_VERTICAL_POWER_GROUND_SLOTS):
         raise ConfigError("internal configuration error: user slot list overlaps reserved power/ground slots")
@@ -224,9 +270,11 @@ def generate_padring_config(
         "source_info": str(info_path),
         "source_template": str(template_path),
         "block": block.upper(),
+        "team_code": team_code,
         "pin_count": len(pins),
         "user_slot_count": len(slots),
         "pads": mapping,
+        "breaks": break_entries,
     }
     return "\n".join(lines) + ending, map_doc
 
