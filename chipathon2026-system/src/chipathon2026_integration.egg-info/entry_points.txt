@@ -1,0 +1,3 @@
+[console_scripts]
+chipathon-download-gds = chipathon2026_integration.downloader:main
+chipathon-integrate = chipathon2026_integration.cli:main
