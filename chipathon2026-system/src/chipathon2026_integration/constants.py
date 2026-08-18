@@ -45,7 +45,8 @@ RESERVED_VERTICAL_POWER_GROUND_SLOTS = ("W11", "W12", "E11", "E12")
 
 REQUIRED_PADRING_LEF_CELLS = (
     "gf180mcu_fd_io__cor",
-    "gf180mcu_fd_io__fill1",
+    "gf180mcu_fd_io__fill5",
+    "gf180mcu_fd_io__brk5",
     "gf180mcu_fd_io__bi_t",
     "gf180mcu_fd_io__bi_24t",
     "gf180mcu_fd_io__in_c",

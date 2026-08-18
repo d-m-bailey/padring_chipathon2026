@@ -23,7 +23,9 @@ def test_safe_identifier():
 def test_audit_valid_full_template(full_template):
     audit = audit_physical_template(full_template)
     assert audit["valid_for_production"]
+    assert audit["pad_count"] == 88
     assert audit["immutable_slot_count"] == 88
+    assert audit["legacy_instance_names"] == []
 
 
 def test_generate_a_mapping_preserves_flip_and_comment(full_template, minimal_info, tmp_path):
@@ -40,6 +42,17 @@ def test_generate_a_mapping_preserves_flip_and_comment(full_template, minimal_in
     assert "PAD unused_W16 W gf180mcu_fd_io__asig_5p0 ;" in cfg
     assert "PAD W11 W gf180mcu_fd_io__dvdd ;" in cfg
     assert "PAD W12 W gf180mcu_fd_io__dvss ;" in cfg
+
+
+def test_production_template_uses_supported_padring_directives(minimal_info, tmp_path):
+    template = Path(__file__).parents[1] / "padring_template.cfg"
+    cfg, _mapping = generate_padring_config(
+        info=minimal_info,
+        info_path=tmp_path / "info.yaml",
+        template_path=template,
+    )
+
+    assert not any(line.lstrip().startswith("LOC ") for line in cfg.splitlines())
 
 
 def test_sanitization_collision(full_template, minimal_info, tmp_path):
@@ -67,3 +80,11 @@ def test_legacy_template_rejected(tmp_path, minimal_info):
     path.write_text("DESIGN d;\nLOC W;\nPAD config1 W gf180mcu_fd_io__bi_t ;\n", encoding="utf-8")
     with pytest.raises(ConfigError, match="not a production immutable-slot template"):
         generate_padring_config(info=minimal_info, info_path=tmp_path/"i.yaml", template_path=path)
+
+
+def test_complete_template_rejects_extra_legacy_pad(full_template, minimal_info, tmp_path):
+    text = full_template.read_text(encoding="utf-8")
+    full_template.write_text(text + "PAD legacy S gf180mcu_fd_io__asig_5p0 ;\n", encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="unexpected PAD instances"):
+        generate_padring_config(info=minimal_info, info_path=tmp_path / "i.yaml", template_path=full_template)

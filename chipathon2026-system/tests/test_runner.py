@@ -21,4 +21,5 @@ def test_command_shape(tmp_path):
     )
     assert cmd[0] == "/bin/padring"
     assert cmd.count("--lef") == 9
+    assert str(tmp_path / "libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__fill5.lef") in cmd
     assert cmd[-1] == "ring.cfg"

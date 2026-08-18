@@ -76,6 +76,7 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
     immutable = {name for name in by_name if PHYSICAL_SLOT_RE.fullmatch(name)}
     missing = [slot for slot in ALL_PHYSICAL_SLOTS if slot not in immutable]
     extra = sorted(immutable - set(ALL_PHYSICAL_SLOTS))
+    legacy = sorted(entry.instance for entry in entries if entry.instance not in immutable)
     side_mismatches = [
         slot for slot in immutable if by_name[slot].location != slot[0]
     ]
@@ -96,8 +97,8 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
         "extra_physical_slots": extra,
         "side_mismatches": side_mismatches,
         "reserved_power_ground_issues": reserved_issues,
-        "legacy_instance_names": sorted(entry.instance for entry in entries if entry.instance not in immutable),
-        "valid_for_production": not missing and not extra and not side_mismatches and not reserved_issues,
+        "legacy_instance_names": legacy,
+        "valid_for_production": not missing and not extra and not legacy and not side_mismatches and not reserved_issues,
     }
 
 
@@ -150,6 +151,8 @@ def generate_padring_config(
                 details.append(f"missing {len(audit['missing_physical_slots'])} immutable physical slots")
             if audit["side_mismatches"]:
                 details.append(f"side mismatch: {audit['side_mismatches']}")
+            if audit["legacy_instance_names"]:
+                details.append(f"unexpected PAD instances: {audit['legacy_instance_names']}")
             if audit["reserved_power_ground_issues"]:
                 details.extend(audit["reserved_power_ground_issues"])
             raise ConfigError(

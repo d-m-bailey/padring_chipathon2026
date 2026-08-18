@@ -1,0 +1,49 @@
+# Build a Chipathon 2026 padframe by project ID.
+#
+# From the repository root:
+#   make -f chipathon2026-system/Makefile.padframe A01
+#
+# All paths may be overridden on the command line, for example:
+#   make -f chipathon2026-system/Makefile.padframe A01 \
+#     INFO_DIR=/path/to/info OUTPUT_DIR=/path/to/build \
+#     PADRING=/path/to/padring TECH_PDK=/path/to/gf180mcuD
+
+MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
+INFO_DIR ?= info
+OUTPUT_DIR ?= build/padframes
+TEMPLATE ?= $(MAKEFILE_DIR)padring_template.cfg
+PADRING ?= $(abspath $(MAKEFILE_DIR)../build/padring)
+PDK_ROOT ?= /foss/pdks
+PDK ?= gf180mcuD
+TECH_PDK ?= $(PDK_ROOT)/$(PDK)
+PYTHON ?= python3
+INTEGRATE ?= env PYTHONPATH=$(MAKEFILE_DIR)src $(PYTHON) -m chipathon2026_integration.cli
+
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help:
+	@echo "Build a padframe with:"
+	@echo "  make -f chipathon2026-system/Makefile.padframe <PROJECT_ID>"
+	@echo
+	@echo "Example:"
+	@echo "  make -f chipathon2026-system/Makefile.padframe A01"
+	@echo
+	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK"
+
+# A project-ID target creates its project-specific padring CFG, pin mapping,
+# DEF, and SVG. It intentionally rebuilds so edits to included YAML data are
+# not hidden from make's dependency tracking.
+%: $(INFO_DIR)/%_info.yaml $(TEMPLATE)
+	@mkdir -p $(OUTPUT_DIR)/$@
+	$(INTEGRATE) generate-padring $< $(TEMPLATE) \
+		--block A \
+		--output $(OUTPUT_DIR)/$@/$@_padring.cfg \
+		--map-out $(OUTPUT_DIR)/$@/$@_pad_map.yaml
+	$(INTEGRATE) run-padring \
+		--padring $(PADRING) \
+		--tech-pdk $(TECH_PDK) \
+		--cfg $(OUTPUT_DIR)/$@/$@_padring.cfg \
+		--def-out $(OUTPUT_DIR)/$@/$@_padring.def \
+		--svg-out $(OUTPUT_DIR)/$@/$@_padring.svg

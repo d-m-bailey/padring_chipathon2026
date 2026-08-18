@@ -1,7 +1,8 @@
 # GF180 I/O LEFs required by the current ChatGPT_spec.md io_type map.
 PADRING_LEFS := \
   --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__cor.lef \
-  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__fill1.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__fill5.lef \
+  --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__brk5.lef \
   --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__bi_t.lef \
   --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__bi_24t.lef \
   --lef $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__in_c.lef \
