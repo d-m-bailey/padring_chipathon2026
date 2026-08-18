@@ -64,5 +64,5 @@ def run_padring(**kwargs) -> subprocess.CompletedProcess[str]:
     lef_paths = required_lef_paths(tech_pdk)
     add_canonical_pins_to_def(kwargs["output_def"], mapping_path, lef_paths)
     if output_verilog is not None:
-        write_canonical_verilog(output_verilog, kwargs["output_def"], mapping_path, lef_paths)
+        write_canonical_verilog(output_verilog, kwargs["output_def"], mapping_path, cfg, lef_paths)
     return result

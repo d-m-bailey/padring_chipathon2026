@@ -74,6 +74,17 @@ Padring components retain canonical slot names such as `W01`. The generated
 DEF and Verilog expose user-area terminals such as `W01_A`; project virtual
 DEF terminals use the participant name instead, such as `RST_A`.
 
+The Verilog physical-pad ports use bare canonical names such as `W01`. All
+`VSS`/`DVSS` cell terminals share the canonical DVSS-pad network. Each DVDD pad
+inherently breaks the `VDD`/`DVDD` rails and names its resulting power segment
+with its canonical pad name. `BREAK ;` controls the additional physical
+`brk5` isolation rather than creating the DVDD-pad electrical discontinuity.
+
+The generated padring DEF has an `INOUT` Metal5 pin at the physical pad
+location for every canonical slot. DVDD and DVSS canonical pins also contain
+their transformed user-area-facing Metal2 LEF geometry and are marked `USE
+POWER` or `USE GROUND`.
+
 The template selects `fill5` with `FILLER`, selects `brk5` with `BREAKFILLER`,
 and uses a parameterless `BREAK ;` between selected I/O cells. The normal gap
 width is preserved, but every filler cell in that gap is `brk5` rather than

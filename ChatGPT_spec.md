@@ -862,6 +862,37 @@ canonical physical-slot names. It exposes the project-facing cell terminals as
 module ports named `<canonical-pad>_<cell-terminal>`. Break, filler, corner,
 and unused placeholder cells do not create module ports.
 
+The structural padring Verilog also exposes every physical pad using its bare
+canonical slot name, such as `W01`, `W11`, or `W12`. A digital I/O cell's `PAD`
+terminal connects to that canonical port. Analog pad connectivity is aliased to
+the canonical port with a bidirectional `tran` connection where a separate
+canonical-prefixed project-facing terminal is also exposed.
+
+The padring DEF must expose the same bare canonical physical-pad ports. Every
+canonical slot, including unused placeholders, has an `INOUT` pin rectangle on
+Metal5 at the transformed physical pad location. The common GF180 Metal5 `PAD`
+rectangle defines this pad-location geometry for cell variants whose LEF does
+not separately name the physical pad metal.
+
+A canonical DVDD or DVSS pad pin additionally includes all transformed Metal2
+rectangles from that cell's corresponding `DVDD` or `DVSS` LEF terminal. These
+Metal2 shapes face the user area and allow top-level routing to the project.
+DVDD canonical pins use `USE POWER`; DVSS canonical pins use `USE GROUND`.
+Their Metal5 and Metal2 shapes belong to the same canonical DEF pin/net.
+
+All `VSS` and `DVSS` terminals connect to one common ground network. Each
+canonical DVSS pad remains a module port, and multiple DVSS pad ports are
+shorted together. `VDD` and `DVDD` are likewise connected to the same net
+within an individual continuity segment. Every DVDD pad inherently breaks the
+VDD/DVDD rails, so two DVDD pads cannot electrically belong to the same
+segment. `BREAK ;` supplies the separately required `brk5` physical isolation;
+it is not the mechanism that separates DVDD-pad power domains. A powered
+segment uses the bare canonical name of its DVDD pad as its supply port and
+net. A segment reserved for a future project and not yet containing a DVDD pad
+uses a canonical-prefixed temporary interface name such as `E13_DVDD`;
+top-level integration will replace or connect that interface when the actual
+project is installed.
+
 The pad CSV format is:
 
 canonical_pin_name,project_pin_name,type,x,y
