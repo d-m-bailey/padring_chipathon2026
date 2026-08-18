@@ -63,8 +63,14 @@ chipathon-integrate run-padring \
   --tech-pdk "$TECH_PDK" \
   --cfg build/project_padring.cfg \
   --def-out build/project_padring.def \
-  --svg-out build/project_padring.svg
+  --svg-out build/project_padring.svg \
+  --verilog-out build/project_padring.v
 ```
+
+The `Makefile.padframe` GDS stage also writes a `name,type,x,y` CSV. Its
+coordinates are the transformed center of the single square on GDS layer
+`37/0` in each I/O macro, in microns; they are not inferred from the LEF macro
+bounding box.
 
 To generate the project-side virtual DEF, supply the canonical block DIEAREA
 once integration has chosen it:

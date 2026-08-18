@@ -367,7 +367,7 @@ A\_SLOTS \= \[
     "N11",  
 \]
 
-The exact top-edge numbering direction must be fixed when the production 88-pad template is finalized.
+The exact edge numbering direction is fixed by the production 88-pad template.
 
 The legal slot sequence must be explicitly represented as an ordered list such as A\_SLOTS. That ordered list is authoritative.
 
@@ -401,15 +401,18 @@ CORNER CORNER\_2 SW gf180mcu\_fd\_io\_\_cor ;
 CORNER CORNER\_3 NE gf180mcu\_fd\_io\_\_cor ;  
 CORNER CORNER\_4 NW gf180mcu\_fd\_io\_\_cor ;
 
-FILLER gf180mcu\_fd\_io\_\_fill1 ;
-
-LOC N ;
+FILLER gf180mcu\_fd\_io\_\_fill5 ;
 
 PAD N01 N gf180mcu\_fd\_io\_\_asig\_5p0 ;  
 PAD N02 N gf180mcu\_fd\_io\_\_asig\_5p0 ;  
 ...
 
 The template is the physical source of truth.
+
+The production template must contain exactly 88 ordinary PAD entries: N01...N22,
+E01...E22, S01...S22, and W01...W22. Legacy PAD entries must not be retained in
+addition to these slots. YosysHQ padring does not support LOC directives; the
+side is specified directly on each PAD line.
 
 # **16\. Template transformation**
 
@@ -437,11 +440,14 @@ AREA
 GRID  
 CORNER  
 FILLER  
-LOC  
 SPACE  
 FLIP
 
 and all fixed PAD entries.
+
+For a production template, "unrelated" fixed PAD entries means the immutable
+slots outside the selected project block. Unexpected legacy PAD instance names
+are an error because they add physical pads beyond the canonical 88 positions.
 
 # **17\. Physical slots versus pad instance names**
 
@@ -523,7 +529,7 @@ The Makefile invoking padring must provide LEFs for every pad cell the generator
 At minimum, based on the current pin types:
 
 gf180mcu\_fd\_io\_\_cor.lef  
-gf180mcu\_fd\_io\_\_fill1.lef  
+gf180mcu\_fd\_io\_\_fill5.lef
 gf180mcu\_fd\_io\_\_bi\_t.lef  
 gf180mcu\_fd\_io\_\_bi\_24t.lef  
 gf180mcu\_fd\_io\_\_in\_c.lef  
@@ -535,7 +541,7 @@ gf180mcu\_fd\_io\_\_dvss.lef
 A Makefile invocation therefore needs entries such as:
 
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_cor.lef \\  
-\--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_fill1.lef \\  
+\--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_fill5.lef \\
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_bi\_t.lef \\  
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_bi\_24t.lef \\  
 \--lef $(TECH\_PDK)/libs.ref/gf180mcu\_fd\_io/lef/gf180mcu\_fd\_io\_\_in\_c.lef \\  
@@ -550,13 +556,14 @@ Current style:
 
 $(BIN\_DIR)/padring \-v \\  
     \--lef .../gf180mcu\_fd\_io\_\_cor.lef \\  
-    \--lef .../gf180mcu\_fd\_io\_\_fill1.lef \\  
+    \--lef .../gf180mcu\_fd\_io\_\_fill5.lef \\
     \--lef .../gf180mcu\_fd\_io\_\_bi\_t.lef \\  
     \--lef .../gf180mcu\_fd\_io\_\_asig\_5p0.lef \\  
     \--lef .../gf180mcu\_fd\_io\_\_dvdd.lef \\  
     \--lef .../gf180mcu\_fd\_io\_\_dvss.lef \\  
     \--svg $(PADRING\_DIR)/outputs/workshop\_padring.svg \\  
     \--def $(DEF) \\  
+    \--ver $(PADRING\_DIR)/outputs/workshop\_padring.v \\
     $(PADRING\_DIR)/workshop\_padring.cfg \\  
     | tee $(PADRING\_DIR)/workshop\_padring.log
 
@@ -708,6 +715,7 @@ The converter should reject:
 * duplicate generated padring instance names;  
 * collisions after pin-name sanitization;  
 * missing physical slots in the padring template;  
+* unexpected legacy PAD instances in a production template;
 * missing required cell mappings.
 
 It should also verify that every physical project slot is accounted for as one of:
@@ -745,20 +753,69 @@ Do not duplicate all physical padring geometry in another YAML file.
 
 The next implementation work should explicitly define:
 
-1\. the complete 88-slot physical naming/order;
+1\. exact left/right VSS versus project-VDD assignment at positions 11/12;
 
-2\. exact N01...N22 and S01...S22 numbering direction;
+2\. explicit ordered slot lists for B, C, D, and E block types;
 
-3\. exact left/right VSS versus project-VDD assignment at positions 11/12;
+3\. transformations from canonical placement to each legal physical location;
 
-4\. explicit ordered slot lists for A, B, C, D, and E block types;
+4\. exact project-facing terminals for each GF180 I/O cell, taken from authoritative LEF/CDL/Verilog definitions;
 
-5\. transformations from canonical placement to each legal physical location;
+5\. whether power and ground should remain participant io\_type entries or be entirely integration-managed;
 
-6\. exact project-facing terminals for each GF180 I/O cell, taken from authoritative LEF/CDL/Verilog definitions;
+6\. package-bond mappings from 88 die pads to the two 64-pin package configurations.
 
-7\. whether power and ground should remain participant io\_type entries or be entirely integration-managed;
+# **31\. Project-ID padframe build and generated artifacts**
 
-8\. package-bond mappings from 88 die pads to the two 64-pin package configurations.
+The repository provides chipathon2026-system/Makefile.padframe. From the
+repository root, a project padframe is built by project ID:
+
+make \-f chipathon2026-system/Makefile.padframe A01
+
+The default input is:
+
+info/A01\_info.yaml
+
+INFO\_DIR and all build/tool/PDK paths must remain overrideable Make variables.
+DEF\_DBU defaults to 0.005 microns and must remain overrideable. The generated
+DEF therefore uses UNITS DISTANCE MICRONS 200, and the KLayout import/output DBU
+must be set to the same value.
+When the repository-local padring executable is selected, the Makefile must
+rebuild it with CMake whenever its C++ source or header files change. This
+prevents newly added command-line options from being passed to a stale binary.
+The project-ID target performs these stages in order:
+
+1\. generate-padring;
+
+2\. run-padring;
+
+3\. KLayout GDS assembly using Workshop\_CASS/def2stream.py.
+
+The default project output directory is build/padframes/A01 and contains:
+
+```text
+A01_padring.cfg
+A01_pad_map.yaml
+A01_padring.def
+A01_padring.svg
+A01_padring.v
+A01_padring.gds
+A01_pads.csv
+```
+
+The Verilog output is a structural padring module containing one cell instance
+for each non-filler PAD entry.
+
+The pad CSV format is:
+
+name,type,x,y
+
+name is the PAD instance name. type is the GF180 I/O macro name. x and y are
+micron coordinates at the center of the single square on GDS layer 37,
+datatype 0, within that I/O macro after applying the DEF instance placement and
+orientation. The CSV coordinates must be derived from the source I/O GDS
+geometry, not from the LEF macro bounding box. Filler and corner instances are
+excluded. Missing, multiple, or non-square 37/0 marker geometry is a
+deterministic error.
 
 ***Key rule:** Physical slot order must always be represented explicitly. Do not derive it from words such as clockwise, counter-clockwise, left-to-right, or package orientation when an ordered list can be provided instead.*

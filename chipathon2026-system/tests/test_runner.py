@@ -17,9 +17,12 @@ def test_required_lefs_include_all_current_cells(tmp_path):
 def test_command_shape(tmp_path):
     cmd = build_padring_command(
         padring_exe=Path("/bin/padring"), tech_pdk=tmp_path, cfg=Path("ring.cfg"),
-        output_def=Path("ring.def"), output_svg=Path("ring.svg")
+        output_def=Path("ring.def"), output_svg=Path("ring.svg"),
+        output_verilog=Path("ring.v"),
     )
     assert cmd[0] == "/bin/padring"
     assert cmd.count("--lef") == 9
     assert str(tmp_path / "libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__fill5.lef") in cmd
+    assert cmd[cmd.index("--ver") + 1] == "ring.v"
+    assert cmd[cmd.index("--dbu") + 1] == "0.005"
     assert cmd[-1] == "ring.cfg"

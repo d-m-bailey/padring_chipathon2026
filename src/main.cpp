@@ -56,6 +56,8 @@ int main(int argc, char *argv[])
         ("o,output", "GDS2 output file", cxxopts::value<std::string>())
         ("svg", "SVG output file", cxxopts::value<std::string>())
         ("def", "DEF output file", cxxopts::value<std::string>())
+        ("dbu", "DEF database unit in microns", cxxopts::value<double>())
+        ("ver", "Verilog output file", cxxopts::value<std::string>())
         ("q,quiet", "produce no console output")
         ("v,verbose", "produce verbose output")
         ("filler", "set the filler cell prefix", cxxopts::value<std::vector<std::string>>())
@@ -96,20 +98,13 @@ int main(int argc, char *argv[])
 
     PadringDB padring;
 
-    double LEFDatabaseUnits = 0.0;
-
     // read the cells from the LEF files
-    // and save the most recent database units figure along the way..
     auto &leffiles = cmdresult["lef"].as<std::vector<std::string> >();
     for(auto leffile : leffiles)
     {
         std::ifstream lefstream(leffile, std::ifstream::in);
         doLog(LOG_INFO, "Reading LEF %s\n", leffile.c_str());
         padring.m_lefreader.parse(lefstream);
-        if (padring.m_lefreader.m_lefDatabaseUnits > 0.0)
-        {
-            LEFDatabaseUnits = padring.m_lefreader.m_lefDatabaseUnits;
-        }
     }
 
     doLog(LOG_INFO,"%d cells read\n", padring.m_lefreader.m_cells.size());
@@ -173,6 +168,30 @@ int main(int argc, char *argv[])
     
     padring.doLayout();
 
+    std::ofstream veros;
+    if (cmdresult.count("ver") != 0)
+    {
+        doLog(LOG_INFO,"Writing padring to Verilog file: %s\n", cmdresult["ver"].as<std::string>().c_str());
+        veros.open(cmdresult["ver"].as<std::string>(), std::ofstream::out);
+        if (!veros.is_open())
+        {
+            doLog(LOG_ERROR, "Cannot open Verilog file for writing!\n");
+            exit(1);
+        }
+        veros << "module " << padring.m_designName << " ();\n";
+    }
+
+    auto writeVerilogPort = [&veros](const LayoutItem *item)
+    {
+        if ((item == nullptr) || (item->m_ltype != LayoutItem::TYPE_CELL)) return;
+
+        if (veros.is_open())
+        {
+            veros << "  " << item->m_cellname << " \\" << item->m_instance << "  ();\n";
+        }
+
+    };
+
     // get corners
     LayoutItem *topleft  = padring.m_north.getFirstCorner();
     LayoutItem *topright = padring.m_north.getLastCorner();
@@ -207,7 +226,17 @@ int main(int argc, char *argv[])
 
     SVGWriter svg(svgos, padring.m_dieWidth, padring.m_dieHeight);
     DEFWriter def(defos, padring.m_dieWidth, padring.m_dieHeight);
-    def.setDatabaseUnits(LEFDatabaseUnits);
+    double outputDBU = 0.005;
+    if (cmdresult.count("dbu") != 0)
+    {
+        outputDBU = cmdresult["dbu"].as<double>();
+    }
+    if (outputDBU <= 0.0)
+    {
+        doLog(LOG_ERROR, "DEF database unit must be greater than zero\n");
+        exit(1);
+    }
+    def.setDatabaseUnits(1.0 / outputDBU);
     def.setDesignName(padring.m_designName);
 
     // emit GDS2 and SVG
@@ -240,6 +269,7 @@ int main(int argc, char *argv[])
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
         {
+            writeVerilogPort(item);
             if (writer != nullptr) writer->writeCell(item);
             svg.writeCell(item);
             def.writeCell(item);
@@ -282,6 +312,7 @@ int main(int argc, char *argv[])
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
         {
+            writeVerilogPort(item);
             if (writer != nullptr) writer->writeCell(item);
             svg.writeCell(item);  
             def.writeCell(item);          
@@ -324,6 +355,7 @@ int main(int argc, char *argv[])
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
         {
+            writeVerilogPort(item);
             if (writer != nullptr) writer->writeCell(item);
             svg.writeCell(item);
             def.writeCell(item);
@@ -366,6 +398,7 @@ int main(int argc, char *argv[])
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
         {
+            writeVerilogPort(item);
             if (writer != nullptr) writer->writeCell(item);
             svg.writeCell(item);
             def.writeCell(item);
@@ -403,6 +436,7 @@ int main(int argc, char *argv[])
         }        
     }
 
+    if (veros.is_open()) veros << "endmodule\n";
     if (writer != nullptr) delete writer;
 
     for(auto cell : padring.m_lefreader.m_cells)
@@ -412,4 +446,3 @@ int main(int argc, char *argv[])
 
     return 0;
 }
-

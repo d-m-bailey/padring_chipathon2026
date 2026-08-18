@@ -6,10 +6,102 @@ import pya
 import re
 import json
 import copy
+import csv
 import sys
 import os
-
 errors = 0
+
+
+def read_def_components(path):
+    units = 1.0
+    current = None
+    components = []
+    component_re = re.compile(r"^\s*-\s+(\S+)\s+(\S+)\s*$")
+    placed_re = re.compile(
+        r"^\s*\+\s+PLACED\s+\(\s*([-+0-9.eE]+)\s+([-+0-9.eE]+)\s*\)\s+(\S+)\s*;"
+    )
+    units_re = re.compile(r"^\s*UNITS\s+DISTANCE\s+MICRONS\s+([-+0-9.eE]+)\s*;")
+
+    with open(path, "r") as stream:
+        for line in stream:
+            match = units_re.match(line)
+            if match:
+                units = float(match.group(1))
+                continue
+            match = component_re.match(line)
+            if match:
+                current = (match.group(1), match.group(2))
+                continue
+            match = placed_re.match(line)
+            if match and current:
+                components.append(
+                    (
+                        current[0],
+                        current[1],
+                        float(match.group(1)) / units,
+                        float(match.group(2)) / units,
+                        match.group(3),
+                    )
+                )
+                current = None
+    return components
+
+
+def transform_point(x, y, orientation):
+    transforms = {
+        "N": lambda u, v: (u, v),
+        "S": lambda u, v: (-u, -v),
+        "W": lambda u, v: (-v, u),
+        "E": lambda u, v: (v, -u),
+        "FN": lambda u, v: (-u, v),
+        "FS": lambda u, v: (u, -v),
+        "FE": lambda u, v: (-v, -u),
+        "FW": lambda u, v: (v, u),
+    }
+    if orientation not in transforms:
+        raise ValueError("unsupported DEF orientation %s" % orientation)
+    return transforms[orientation](x, y)
+
+
+def write_pad_centers(layout, def_path, output_path, layer, datatype):
+    global errors
+    layer_index = layout.find_layer(pya.LayerInfo(layer, datatype))
+    if layer_index is None or layer_index < 0:
+        print("[ERROR] GDS layer %d/%d was not found" % (layer, datatype))
+        errors += 1
+        return
+
+    centers = {}
+    components = read_def_components(def_path)
+    with open(output_path, "w", newline="") as stream:
+        writer = csv.writer(stream)
+        writer.writerow(("name", "type", "x", "y"))
+        for name, cell_name, place_x, place_y, orientation in components:
+            if name.startswith("FILLER_") or cell_name.endswith("__cor"):
+                continue
+
+            if cell_name not in centers:
+                cell = layout.cell(cell_name)
+                boxes = [] if cell is None else [shape.bbox() for shape in cell.shapes(layer_index).each()]
+                if len(boxes) != 1 or boxes[0].width() != boxes[0].height():
+                    print(
+                        "[ERROR] Cell '%s' must contain exactly one square on GDS layer %d/%d"
+                        % (cell_name, layer, datatype)
+                    )
+                    errors += 1
+                    centers[cell_name] = None
+                else:
+                    box = boxes[0]
+                    centers[cell_name] = (
+                        (box.left + box.right) * layout.dbu / 2.0,
+                        (box.bottom + box.top) * layout.dbu / 2.0,
+                    )
+
+            center = centers[cell_name]
+            if center is None:
+                continue
+            offset_x, offset_y = transform_point(center[0], center[1], orientation)
+            writer.writerow((name, cell_name, place_x + offset_x, place_y + offset_y))
 
 # Load technology file
 tech = pya.Technology()
@@ -24,6 +116,7 @@ if len(lef_files) > 0:
 
 # Load def file
 main_layout = pya.Layout()
+main_layout.dbu = float(output_dbu) if "output_dbu" in globals() else 0.005
 print("[INFO] Reporting cells prior to loading DEF ...")
 for i in main_layout.each_cell():
     print("[INFO] '{0}'".format(i.name))
@@ -47,6 +140,15 @@ print("[INFO] Merging GDS/OAS files...")
 for fil in in_files.split():
     print("\t{0}".format(fil))
     main_layout.read(fil)
+
+if "csv_file" in globals() and csv_file:
+    write_pad_centers(
+        main_layout,
+        in_def,
+        csv_file,
+        int(marker_layer) if "marker_layer" in globals() else 37,
+        int(marker_datatype) if "marker_datatype" in globals() else 0,
+    )
 
 # Copy the top level only to a new layout
 print("[INFO] Copying toplevel cell '{0}'".format(design_name))

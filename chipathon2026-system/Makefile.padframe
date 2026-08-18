@@ -6,19 +6,48 @@
 # All paths may be overridden on the command line, for example:
 #   make -f chipathon2026-system/Makefile.padframe A01 \
 #     INFO_DIR=/path/to/info OUTPUT_DIR=/path/to/build \
-#     PADRING=/path/to/padring TECH_PDK=/path/to/gf180mcuD
+#     PADRING=/path/to/padring TECH_PDK=/path/to/gf180mcuD \
+#     KLAYOUT=/path/to/klayout
 
 MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+PADRING_SOURCE_DIR := $(abspath $(MAKEFILE_DIR)..)
+PADRING_BUILD_DIR ?= $(PADRING_SOURCE_DIR)/build
+DEFAULT_PADRING := $(PADRING_BUILD_DIR)/padring
+PADRING_SOURCES := \
+	$(PADRING_SOURCE_DIR)/CMakeLists.txt \
+	$(wildcard $(PADRING_SOURCE_DIR)/src/*.cpp) \
+	$(wildcard $(PADRING_SOURCE_DIR)/src/*.h) \
+	$(wildcard $(PADRING_SOURCE_DIR)/src/lef/*) \
+	$(wildcard $(PADRING_SOURCE_DIR)/src/gds2/*)
 
 INFO_DIR ?= info
 OUTPUT_DIR ?= build/padframes
 TEMPLATE ?= $(MAKEFILE_DIR)padring_template.cfg
-PADRING ?= $(abspath $(MAKEFILE_DIR)../build/padring)
+PADRING ?= $(DEFAULT_PADRING)
 PDK_ROOT ?= /foss/pdks
 PDK ?= gf180mcuD
 TECH_PDK ?= $(PDK_ROOT)/$(PDK)
+DEF_DBU ?= 0.005
 PYTHON ?= python3
 INTEGRATE ?= env PYTHONPATH=$(MAKEFILE_DIR)src $(PYTHON) -m chipathon2026_integration.cli
+KLAYOUT ?= klayout
+DEF2STREAM ?= $(abspath $(MAKEFILE_DIR)../Workshop_CASS/def2stream.py)
+DESIGN_NAME ?= workshop_padring
+IO_LEF_DIR ?= $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef
+IO_GDS ?= $(TECH_PDK)/libs.ref/gf180mcu_fd_io/gds/gf180mcu_fd_io.gds
+TECH_FILE ?= $(TECH_PDK)/libs.tech/klayout/tech/gf180mcu.lyt
+LAYER_MAP ?= $(TECH_PDK)/libs.tech/klayout/tech/gf180mcu.map
+PADFRAME_LEFS ?= \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__cor.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__fill5.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__brk5.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__bi_t.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__bi_24t.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__in_c.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__in_s.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__asig_5p0.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__dvdd.lef \
+	$(IO_LEF_DIR)/gf180mcu_fd_io__dvss.lef
 
 .DEFAULT_GOAL := help
 
@@ -30,12 +59,16 @@ help:
 	@echo "Example:"
 	@echo "  make -f chipathon2026-system/Makefile.padframe A01"
 	@echo
-	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK"
+	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK KLAYOUT"
+
+$(DEFAULT_PADRING): $(PADRING_SOURCES)
+	cmake -S $(PADRING_SOURCE_DIR) -B $(PADRING_BUILD_DIR)
+	cmake --build $(PADRING_BUILD_DIR) --target padring
 
 # A project-ID target creates its project-specific padring CFG, pin mapping,
-# DEF, and SVG. It intentionally rebuilds so edits to included YAML data are
-# not hidden from make's dependency tracking.
-%: $(INFO_DIR)/%_info.yaml $(TEMPLATE)
+# DEF, SVG, Verilog, GDS, and pad-center CSV. It intentionally rebuilds so
+# edits to included YAML data are not hidden from make's dependency tracking.
+%: $(INFO_DIR)/%_info.yaml $(TEMPLATE) $(PADRING)
 	@mkdir -p $(OUTPUT_DIR)/$@
 	$(INTEGRATE) generate-padring $< $(TEMPLATE) \
 		--block A \
@@ -46,4 +79,20 @@ help:
 		--tech-pdk $(TECH_PDK) \
 		--cfg $(OUTPUT_DIR)/$@/$@_padring.cfg \
 		--def-out $(OUTPUT_DIR)/$@/$@_padring.def \
-		--svg-out $(OUTPUT_DIR)/$@/$@_padring.svg
+		--def-dbu $(DEF_DBU) \
+		--svg-out $(OUTPUT_DIR)/$@/$@_padring.svg \
+		--verilog-out $(OUTPUT_DIR)/$@/$@_padring.v
+	$(KLAYOUT) -zz \
+		-rd design_name=$(DESIGN_NAME) \
+		-rd in_def=$(OUTPUT_DIR)/$@/$@_padring.def \
+		-rd lef_files="$(PADFRAME_LEFS)" \
+		-rd in_files="$(IO_GDS)" \
+		-rd seal_file="" \
+		-rd out_file=$(OUTPUT_DIR)/$@/$@_padring.gds \
+		-rd tech_file=$(TECH_FILE) \
+		-rd layer_map=$(LAYER_MAP) \
+		-rd output_dbu=$(DEF_DBU) \
+		-rd csv_file=$(OUTPUT_DIR)/$@/$@_pads.csv \
+		-rd marker_layer=37 \
+		-rd marker_datatype=0 \
+		-r $(DEF2STREAM)

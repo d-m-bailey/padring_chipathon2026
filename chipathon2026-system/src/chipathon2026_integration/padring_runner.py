@@ -19,6 +19,8 @@ def build_padring_command(
     cfg: Path,
     output_def: Path,
     output_svg: Path | None = None,
+    output_verilog: Path | None = None,
+    def_dbu: float = 0.005,
     verbose: bool = True,
 ) -> list[str]:
     cmd = [str(padring_exe)]
@@ -28,6 +30,9 @@ def build_padring_command(
         cmd.extend(["--lef", str(lef)])
     if output_svg is not None:
         cmd.extend(["--svg", str(output_svg)])
+    if output_verilog is not None:
+        cmd.extend(["--ver", str(output_verilog)])
+    cmd.extend(["--dbu", str(def_dbu)])
     cmd.extend(["--def", str(output_def), str(cfg)])
     return cmd
 
@@ -46,5 +51,7 @@ def run_padring(**kwargs) -> subprocess.CompletedProcess[str]:
     kwargs["output_def"].parent.mkdir(parents=True, exist_ok=True)
     if kwargs.get("output_svg") is not None:
         kwargs["output_svg"].parent.mkdir(parents=True, exist_ok=True)
+    if kwargs.get("output_verilog") is not None:
+        kwargs["output_verilog"].parent.mkdir(parents=True, exist_ok=True)
     cmd = build_padring_command(**kwargs)
     return subprocess.run(cmd, text=True, check=True, capture_output=False)
