@@ -780,6 +780,9 @@ INFO\_DIR and all build/tool/PDK paths must remain overrideable Make variables.
 DEF\_DBU defaults to 0.005 microns and must remain overrideable. The generated
 DEF therefore uses UNITS DISTANCE MICRONS 200, and the KLayout import/output DBU
 must be set to the same value.
+PAD\_MARKER\_LAYER and PAD\_MARKER\_DATATYPE must also be overrideable Make
+variables. Their GF180 defaults are 37 and 0 respectively; other processes may
+identify the physical pad-center marker on a different GDS layer/datatype pair.
 When the repository-local padring executable is selected, the Makefile must
 rebuild it with CMake whenever its C++ source or header files change. This
 prevents newly added command-line options from being passed to a stale binary.
@@ -810,12 +813,18 @@ The pad CSV format is:
 
 name,type,x,y
 
-name is the PAD instance name. type is the GF180 I/O macro name. x and y are
-micron coordinates at the center of the single square on GDS layer 37,
-datatype 0, within that I/O macro after applying the DEF instance placement and
-orientation. The CSV coordinates must be derived from the source I/O GDS
+name is the PAD instance name. type is the I/O macro name. x and y are micron
+coordinates at the center of the single square on the configured GDS marker
+layer/datatype pair (37/0 by default for GF180), within that I/O macro after
+applying the DEF instance placement and orientation. The CSV coordinates must be derived from the source I/O GDS
 geometry, not from the LEF macro bounding box. Filler and corner instances are
-excluded. Missing, multiple, or non-square 37/0 marker geometry is a
-deterministic error.
+excluded. The configured marker layer/datatype must be searched recursively through the complete I/O
+macro hierarchy. The search must virtually flatten and merge the recursive
+geometry in macro-local coordinates before selecting the square and applying
+the top-level DEF transform. DEF orientation transforms must include the
+normalization translation implied by the macro's declared LEF SIZE; applying
+only a rotation/reflection matrix is incorrect for every orientation except N.
+Missing LEF SIZE data or ambiguous square marker geometry is a deterministic
+error.
 
 ***Key rule:** Physical slot order must always be represented explicitly. Do not derive it from words such as clockwise, counter-clockwise, left-to-right, or package orientation when an ordered list can be provided instead.*

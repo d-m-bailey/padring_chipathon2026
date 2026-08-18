@@ -28,6 +28,8 @@ PDK_ROOT ?= /foss/pdks
 PDK ?= gf180mcuD
 TECH_PDK ?= $(PDK_ROOT)/$(PDK)
 DEF_DBU ?= 0.005
+PAD_MARKER_LAYER ?= 37
+PAD_MARKER_DATATYPE ?= 0
 PYTHON ?= python3
 INTEGRATE ?= env PYTHONPATH=$(MAKEFILE_DIR)src $(PYTHON) -m chipathon2026_integration.cli
 KLAYOUT ?= klayout
@@ -60,6 +62,7 @@ help:
 	@echo "  make -f chipathon2026-system/Makefile.padframe A01"
 	@echo
 	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK KLAYOUT"
+	@echo "Overrideable geometry: DEF_DBU PAD_MARKER_LAYER PAD_MARKER_DATATYPE"
 
 $(DEFAULT_PADRING): $(PADRING_SOURCES)
 	cmake -S $(PADRING_SOURCE_DIR) -B $(PADRING_BUILD_DIR)
@@ -93,6 +96,6 @@ $(DEFAULT_PADRING): $(PADRING_SOURCES)
 		-rd layer_map=$(LAYER_MAP) \
 		-rd output_dbu=$(DEF_DBU) \
 		-rd csv_file=$(OUTPUT_DIR)/$@/$@_pads.csv \
-		-rd marker_layer=37 \
-		-rd marker_datatype=0 \
+		-rd marker_layer=$(PAD_MARKER_LAYER) \
+		-rd marker_datatype=$(PAD_MARKER_DATATYPE) \
 		-r $(DEF2STREAM)

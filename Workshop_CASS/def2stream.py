@@ -47,15 +47,39 @@ def read_def_components(path):
     return components
 
 
-def transform_point(x, y, orientation):
+def read_lef_sizes(paths):
+    sizes = {}
+    macro = None
+    macro_re = re.compile(r"^\s*MACRO\s+(\S+)")
+    size_re = re.compile(r"^\s*SIZE\s+([-+0-9.eE]+)\s+BY\s+([-+0-9.eE]+)\s*;")
+    end_re = re.compile(r"^\s*END\s+(\S+)")
+
+    for path in paths:
+        with open(path, "r") as stream:
+            for line in stream:
+                match = macro_re.match(line)
+                if match:
+                    macro = match.group(1)
+                    continue
+                match = size_re.match(line)
+                if match and macro:
+                    sizes[macro] = (float(match.group(1)), float(match.group(2)))
+                    continue
+                match = end_re.match(line)
+                if match and match.group(1) == macro:
+                    macro = None
+    return sizes
+
+
+def transform_point(x, y, width, height, orientation):
     transforms = {
         "N": lambda u, v: (u, v),
-        "S": lambda u, v: (-u, -v),
-        "W": lambda u, v: (-v, u),
-        "E": lambda u, v: (v, -u),
-        "FN": lambda u, v: (-u, v),
-        "FS": lambda u, v: (u, -v),
-        "FE": lambda u, v: (-v, -u),
+        "S": lambda u, v: (width - u, height - v),
+        "W": lambda u, v: (height - v, u),
+        "E": lambda u, v: (v, width - u),
+        "FN": lambda u, v: (width - u, v),
+        "FS": lambda u, v: (u, height - v),
+        "FE": lambda u, v: (height - v, width - u),
         "FW": lambda u, v: (v, u),
     }
     if orientation not in transforms:
@@ -63,7 +87,7 @@ def transform_point(x, y, orientation):
     return transforms[orientation](x, y)
 
 
-def write_pad_centers(layout, def_path, output_path, layer, datatype):
+def write_pad_centers(layout, def_path, lef_paths, output_path, layer, datatype):
     global errors
     layer_index = layout.find_layer(pya.LayerInfo(layer, datatype))
     if layer_index is None or layer_index < 0:
@@ -72,6 +96,7 @@ def write_pad_centers(layout, def_path, output_path, layer, datatype):
         return
 
     centers = {}
+    sizes = read_lef_sizes(lef_paths)
     components = read_def_components(def_path)
     with open(output_path, "w", newline="") as stream:
         writer = csv.writer(stream)
@@ -82,16 +107,24 @@ def write_pad_centers(layout, def_path, output_path, layer, datatype):
 
             if cell_name not in centers:
                 cell = layout.cell(cell_name)
-                boxes = [] if cell is None else [shape.bbox() for shape in cell.shapes(layer_index).each()]
-                if len(boxes) != 1 or boxes[0].width() != boxes[0].height():
+                marker_region = (
+                    pya.Region() if cell is None else pya.Region(cell.begin_shapes_rec(layer_index))
+                )
+                marker_region.merge()
+                squares = [
+                    polygon.bbox()
+                    for polygon in marker_region.each()
+                    if polygon.bbox().width() == polygon.bbox().height()
+                ]
+                if len(squares) != 1:
                     print(
-                        "[ERROR] Cell '%s' must contain exactly one square on GDS layer %d/%d"
+                        "[ERROR] Cell '%s' must contain exactly one recursively flattened square on GDS layer %d/%d"
                         % (cell_name, layer, datatype)
                     )
                     errors += 1
                     centers[cell_name] = None
                 else:
-                    box = boxes[0]
+                    box = squares[0]
                     centers[cell_name] = (
                         (box.left + box.right) * layout.dbu / 2.0,
                         (box.bottom + box.top) * layout.dbu / 2.0,
@@ -100,7 +133,14 @@ def write_pad_centers(layout, def_path, output_path, layer, datatype):
             center = centers[cell_name]
             if center is None:
                 continue
-            offset_x, offset_y = transform_point(center[0], center[1], orientation)
+            if cell_name not in sizes:
+                print("[ERROR] LEF SIZE was not found for cell '%s'" % cell_name)
+                errors += 1
+                continue
+            width, height = sizes[cell_name]
+            offset_x, offset_y = transform_point(
+                center[0], center[1], width, height, orientation
+            )
             writer.writerow((name, cell_name, place_x + offset_x, place_y + offset_y))
 
 # Load technology file
@@ -145,6 +185,7 @@ if "csv_file" in globals() and csv_file:
     write_pad_centers(
         main_layout,
         in_def,
+        lef_files.split(),
         csv_file,
         int(marker_layer) if "marker_layer" in globals() else 37,
         int(marker_datatype) if "marker_datatype" in globals() else 0,

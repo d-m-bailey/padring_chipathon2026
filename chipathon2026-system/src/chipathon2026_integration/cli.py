@@ -56,6 +56,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--cfg", type=Path, required=True)
     s.add_argument("--def-out", type=Path, required=True)
     s.add_argument("--svg-out", type=Path)
+    s.add_argument("--verilog-out", type=Path)
+    s.add_argument("--def-dbu", type=float, default=0.005)
 
     s = sub.add_parser("run-padring", help="run YosysHQ padring with all required GF180 LEFs")
     s.add_argument("--padring", type=Path, required=True)
@@ -63,6 +65,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--cfg", type=Path, required=True)
     s.add_argument("--def-out", type=Path, required=True)
     s.add_argument("--svg-out", type=Path)
+    s.add_argument("--verilog-out", type=Path)
+    s.add_argument("--def-dbu", type=float, default=0.005)
 
     s = sub.add_parser("inspect-lef", help="inspect/validate project-facing GF180 terminals in LEFs")
     s.add_argument("lef", type=Path, nargs="+")
@@ -133,6 +137,8 @@ def main(argv: list[str] | None = None) -> int:
                 cfg=args.cfg,
                 output_def=args.def_out,
                 output_svg=args.svg_out,
+                output_verilog=args.verilog_out,
+                def_dbu=args.def_dbu,
             )
             if args.command == "padring-command":
                 print(" \\\n  ".join(build_padring_command(**kwargs)))
