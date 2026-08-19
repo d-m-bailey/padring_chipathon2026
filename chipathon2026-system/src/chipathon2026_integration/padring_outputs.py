@@ -155,10 +155,10 @@ def write_canonical_verilog(
             graph[right].add(left)
 
     segment_net: dict[str, str] = {}
-    unpowered_segment_ports: set[str] = set()
+    floating_supply_nets: list[str] = []
     remaining = set(graph)
     while remaining:
-        seed = next(iter(remaining))
+        seed = min(remaining)
         component = set()
         stack = [seed]
         while stack:
@@ -172,17 +172,27 @@ def write_canonical_verilog(
             slot for slot in component
             if slot in design.components and design.components[slot].macro == POWER_CELL
         )
-        if len(power_slots) > 1:
-            raise ConfigError(
-                "internal power-topology error: DVDD pads inherently break the VDD/DVDD rails, "
-                f"but topology component {sorted(component)} contains {power_slots}"
-            )
         if power_slots:
-            net = power_slots[0]
+            distances: dict[str, dict[str, int]] = {}
+            for power_slot in power_slots:
+                distance = {power_slot: 0}
+                queue = [power_slot]
+                while queue:
+                    current = queue.pop(0)
+                    for neighbor in graph[current]:
+                        if neighbor in component and neighbor not in distance:
+                            distance[neighbor] = distance[current] + 1
+                            queue.append(neighbor)
+                distances[power_slot] = distance
+            for slot in component:
+                segment_net[slot] = min(
+                    power_slots,
+                    key=lambda power_slot: (distances[power_slot][slot], power_slot),
+                )
         else:
-            net = f"{sorted(component)[0]}_DVDD"
-            unpowered_segment_ports.add(net)
-        segment_net.update({slot: net for slot in component})
+            net = f"FLOAT_VDD_{len(floating_supply_nets) + 1}"
+            floating_supply_nets.append(net)
+            segment_net.update({slot: net for slot in component})
 
     ground_slots = sorted(
         slot for slot in ALL_PHYSICAL_SLOTS
@@ -192,7 +202,15 @@ def write_canonical_verilog(
         raise ConfigError("padring contains no canonical DVSS pad")
     ground_net = ground_slots[0]
 
-    physical_ports = list(ALL_PHYSICAL_SLOTS) + sorted(unpowered_segment_ports)
+    def ground_net_for_slot(slot: str) -> str:
+        if slot.startswith("W"):
+            return "W12"
+        if slot.startswith("E"):
+            return "E11"
+        number = int(slot[1:])
+        return "W12" if number <= 11 else "E11"
+
+    physical_ports = list(ALL_PHYSICAL_SLOTS)
     port_names = physical_ports + [pin["name"] for pin in pins]
     lines = [f"module {safe_identifier(design.name)} ("]
     lines.extend(f"    {name}{',' if i + 1 < len(port_names) else ''}" for i, name in enumerate(port_names))
@@ -202,6 +220,8 @@ def write_canonical_verilog(
     for pin in pins:
         direction = str(pin["direction"]).lower()
         lines.append(f"  {direction} {pin['name']};")
+    for net in floating_supply_nets:
+        lines.append(f"  wire {net};")
     lines.append("")
     for ground_slot in ground_slots[1:]:
         lines.append(f"  assign {ground_slot} = {ground_net};")
@@ -225,7 +245,7 @@ def write_canonical_verilog(
             connection_map["DVSS"] = slot
         for terminal in ("VSS", "DVSS"):
             if terminal in ports and terminal not in connection_map:
-                connection_map[terminal] = ground_net
+                connection_map[terminal] = ground_net_for_slot(slot)
         for terminal in ("VDD", "DVDD"):
             if terminal in ports and terminal not in connection_map:
                 connection_map[terminal] = segment_net[slot]
@@ -251,10 +271,11 @@ def write_canonical_verilog(
             ),
         )
         connection_map = {}
+        local_ground = ground_net_for_slot(nearest_slot)
         if "VSS" in macro.pins:
-            connection_map["VSS"] = ground_net
+            connection_map["VSS"] = local_ground
         if "DVSS" in macro.pins:
-            connection_map["DVSS"] = ground_net
+            connection_map["DVSS"] = local_ground
         if "VDD" in macro.pins:
             connection_map["VDD"] = segment_net[nearest_slot]
         if "DVDD" in macro.pins:

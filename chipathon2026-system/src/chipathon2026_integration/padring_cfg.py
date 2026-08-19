@@ -81,8 +81,7 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
     break_issues: list[str] = []
     found_breaks: list[str] = []
     expected_boundaries = {
-        "BRK_W10_W11": ("W10", "W11"), "BRK_W12_W13": ("W12", "W13"),
-        "BRK_E10_E11": ("E10", "E11"), "BRK_E12_E13": ("E12", "E13"),
+        "BRK_W12_W13": ("W12", "W13"), "BRK_E10_E11": ("E10", "E11"),
     }
     for name, (before, after) in expected_boundaries.items():
         if before in by_name and after in by_name:
@@ -266,6 +265,20 @@ def generate_padring_config(
                 name = f"BRK_BEFORE_{slot.instance}"
                 insertions.append((slot.line_index, ["BREAK ;"]))
                 break_entries.append({"instance": name, "reason": "repeated_power", "before_slot": slot.instance})
+
+    for slot_name in ("W10", "E13"):
+        if slot_name in slots:
+            pin_index = slots.index(slot_name)
+            if pin_index < len(pins):
+                slot = by_name[slot_name]
+                name = f"BRK_DEFAULT_DVDD_{slot_name}"
+                insertion_index = slot.line_index + 1 if slot_name == "W10" else slot.line_index
+                insertions.append((insertion_index, ["BREAK ;"]))
+                break_entries.append({
+                    "instance": name,
+                    "reason": "actual_project_io_next_to_default_dvdd",
+                    "slot": slot_name,
+                })
 
     last_slot = by_name[slots[len(pins) - 1]]
     after_name = f"BRK_AFTER_{block.upper()}"

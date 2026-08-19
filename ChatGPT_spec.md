@@ -283,16 +283,21 @@ but the final polarity/order must be explicitly defined in the padframe template
 
 These cells are owned by the integration template and must not be replaced when translating user pins.
 
-The fixed middle power/ground pair on each vertical edge must be isolated with
-gf180mcu\_fd\_io\_\_brk5 cells at these four boundaries:
+The fixed middle power/ground regions use gf180mcu\_fd\_io\_\_brk5 cells at
+these two boundaries:
 
-* between W10 and W11;
 * between W12 and W13;
-* between E10 and E11;
-* between E12 and E13.
+* between E10 and E11.
 
-These four invariant break cells belong in the physical padring template because
+These two invariant break cells belong in the physical padring template because
 their positions do not depend on participant data.
+
+Each default VSS pad is therefore always separated from any neighboring cell
+other than its paired default VDD pad. There is no fixed break on the opposite
+side of the default VDD pad. A break is added there only when the adjacent slot
+contains an actual project I/O cell; an unused placeholder beside the default
+VDD pad does not cause a break. DVDD pads inherently divide the VDD/DVDD rails
+into distinct electrical segments, and every project ends with a break.
 
 Additional gf180mcu\_fd\_io\_\_brk5 cells are generated dynamically:
 
@@ -896,18 +901,26 @@ power segment. Each `brk5` instance connects its available `VSS` terminal but
 does not reconnect the broken VDD/DVDD rails. Generated DEF and Verilog
 component counts must match.
 
-All `VSS` and `DVSS` terminals connect to one common ground network. Each
-canonical DVSS pad remains a module port, and multiple DVSS pad ports are
-shorted together. `VDD` and `DVDD` are likewise connected to the same net
+Generated filler instance names encode their physical gap and a one-based
+suffix. The gap before the first pad on a side is index 00; the gap after pad
+01 is index 01, and so on. Default fillers use `FILL_<side><gap>_<n>` and break
+fillers use `BRK_<side><gap>_<n>`, for example `FILL_E00_1` and `BRK_E10_1`.
+The same instance names appear in DEF and structural Verilog.
+
+E11 and W12 remain shorted as the global ground network, but individual cell
+connections retain geographic ownership for LVS debugging. All west-edge
+cells, N01-N11, and S01-S11 connect their `VSS` and `DVSS` terminals to W12.
+All east-edge cells, N12-N22, and S12-S22 connect them to E11. Filler and
+corner cells follow the region of their nearest canonical pad. `VDD` and
+`DVDD` are likewise connected to the same net
 within an individual continuity segment. Every DVDD pad inherently breaks the
 VDD/DVDD rails, so two DVDD pads cannot electrically belong to the same
 segment. `BREAK ;` supplies the separately required `brk5` physical isolation;
 it is not the mechanism that separates DVDD-pad power domains. A powered
 segment uses the bare canonical name of its DVDD pad as its supply port and
-net. A segment reserved for a future project and not yet containing a DVDD pad
-uses a canonical-prefixed temporary interface name such as `E13_DVDD`;
-top-level integration will replace or connect that interface when the actual
-project is installed.
+net. Any I/O or filler region that has no DVDD source uses an explicitly
+declared, unique floating net named `FLOAT_VDD_<n>`. Floating regions must not
+reuse a physical pad name or silently connect to another power segment.
 
 The pad CSV format is:
 

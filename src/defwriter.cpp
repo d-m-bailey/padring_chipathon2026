@@ -90,7 +90,10 @@ void DEFWriter::writeCell(const LayoutItem *item)
     
     if (item->m_ltype == LayoutItem::TYPE_FILLER)
     {
-        m_ss << "  - FILLER_" << m_cellCount << " " << item->m_cellname << "\n";
+        if (item->m_instance.empty())
+            m_ss << "  - FILLER_" << m_cellCount << " " << item->m_cellname << "\n";
+        else
+            m_ss << "  - " << item->m_instance << " " << item->m_cellname << "\n";
     }
     else
     {

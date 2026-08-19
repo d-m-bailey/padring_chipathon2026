@@ -24,8 +24,9 @@
 
 #include <iostream>
 #include <fstream>
+#include <cstdio>
 
-#define __PGMVERSION__ "0.02e"
+#define __PGMVERSION__ "0.02f"
 
 #include "logging.h"
 
@@ -294,6 +295,7 @@ int main(int argc, char *argv[])
     def.writeCell(bottomright);
 
     double north_y = padring.m_dieHeight;
+    int northGap = 0;
     for(auto item : padring.m_north)
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
@@ -308,6 +310,7 @@ int main(int argc, char *argv[])
             // do fillers
             double space = item->m_size;
             double pos = item->m_x;
+            int suffix = 1;
             while(space > 0)
             {
                 std::string cellName;
@@ -316,6 +319,10 @@ int main(int argc, char *argv[])
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);
+                    char instanceName[64];
+                    std::snprintf(instanceName, sizeof(instanceName), "%s_N%02d_%d",
+                        item->m_useBreakFiller ? "BRK" : "FILL", northGap, suffix++);
+                    filler.m_instance = instanceName;
                     filler.m_cellname = cellName;
                     filler.m_x = pos;
                     filler.m_y = north_y;
@@ -334,10 +341,12 @@ int main(int argc, char *argv[])
                     exit(1);
                 }
             }
+            northGap++;
         }        
     }
 
     double south_y = 0;
+    int southGap = 0;
     for(auto item : padring.m_south)
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
@@ -352,6 +361,7 @@ int main(int argc, char *argv[])
             // do fillers
             double space = item->m_size;
             double pos = item->m_x;
+            int suffix = 1;
             while(space > 0)
             {
                 std::string cellName;
@@ -360,6 +370,10 @@ int main(int argc, char *argv[])
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);
+                    char instanceName[64];
+                    std::snprintf(instanceName, sizeof(instanceName), "%s_S%02d_%d",
+                        item->m_useBreakFiller ? "BRK" : "FILL", southGap, suffix++);
+                    filler.m_instance = instanceName;
                     filler.m_cellname = cellName;
                     filler.m_x = pos;
                     filler.m_y = south_y;
@@ -378,10 +392,12 @@ int main(int argc, char *argv[])
                     exit(1);
                 }
             }
+            southGap++;
         }        
     }
 
     double west_x = 0;
+    int westGap = 0;
     for(auto item : padring.m_west)
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
@@ -396,6 +412,7 @@ int main(int argc, char *argv[])
             // do fillers
             double space = item->m_size;
             double pos = item->m_y;
+            int suffix = 1;
             while(space > 0)
             {
                 std::string cellName;
@@ -404,6 +421,10 @@ int main(int argc, char *argv[])
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);
+                    char instanceName[64];
+                    std::snprintf(instanceName, sizeof(instanceName), "%s_W%02d_%d",
+                        item->m_useBreakFiller ? "BRK" : "FILL", westGap, suffix++);
+                    filler.m_instance = instanceName;
                     filler.m_cellname = cellName;
                     filler.m_x = west_x;
                     filler.m_y = pos;
@@ -422,10 +443,12 @@ int main(int argc, char *argv[])
                     exit(1);
                 }
             }
+            westGap++;
         }        
     }
 
     double east_x = padring.m_dieWidth;
+    int eastGap = 0;
     for(auto item : padring.m_east)
     {
         if (item->m_ltype == LayoutItem::TYPE_CELL)
@@ -440,6 +463,7 @@ int main(int argc, char *argv[])
             // do fillers
             double space = item->m_size;
             double pos = item->m_y;
+            int suffix = 1;
             while(space > 0)
             {
                 std::string cellName;
@@ -448,6 +472,10 @@ int main(int argc, char *argv[])
                 if (width > 0.0)
                 {
                     LayoutItem filler(LayoutItem::TYPE_FILLER);
+                    char instanceName[64];
+                    std::snprintf(instanceName, sizeof(instanceName), "%s_E%02d_%d",
+                        item->m_useBreakFiller ? "BRK" : "FILL", eastGap, suffix++);
+                    filler.m_instance = instanceName;
                     filler.m_cellname = cellName;
                     filler.m_x = east_x;
                     filler.m_y = pos;
@@ -466,6 +494,7 @@ int main(int argc, char *argv[])
                     exit(1);
                 }
             }
+            eastGap++;
         }        
     }
 

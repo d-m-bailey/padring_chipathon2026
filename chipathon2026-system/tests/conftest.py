@@ -31,8 +31,7 @@ def full_template(tmp_path: Path) -> Path:
             comment = " # keep me" if slot == "W15" else ""
             lines.append(f"PAD {slot} {side}{flip} {cell} ;{comment}")
             break_name = {
-                "W10": "BRK_W10_W11", "W12": "BRK_W12_W13",
-                "E10": "BRK_E10_E11", "E12": "BRK_E12_E13",
+                "W12": "BRK_W12_W13", "E10": "BRK_E10_E11",
             }.get(slot)
             if break_name:
                 lines.append("BREAK ;")

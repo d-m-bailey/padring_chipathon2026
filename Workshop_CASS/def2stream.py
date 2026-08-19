@@ -115,7 +115,7 @@ def write_pad_centers(layout, def_path, lef_paths, output_path, layer, datatype,
         writer = csv.writer(stream)
         writer.writerow(("canonical_pin_name", "project_pin_name", "type", "x", "y"))
         for name, cell_name, place_x, place_y, orientation in components:
-            if name.startswith("FILLER_") or cell_name.endswith(("__cor", "__brk5")):
+            if name.startswith(("FILLER_", "FILL_", "BRK_")) or cell_name.endswith(("__cor", "__fill5", "__brk5")):
                 continue
 
             if cell_name not in centers:
