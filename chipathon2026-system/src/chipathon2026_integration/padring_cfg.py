@@ -159,6 +159,15 @@ def generate_padring_config(
     require_complete_template: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     pins = validate_pins(info)
+    if team_code is not None:
+        normalized_team_code = safe_identifier(team_code.strip())
+        if not team_code.strip() or normalized_team_code != team_code.strip():
+            raise ConfigError(
+                f"team code {team_code!r} must already be a valid canonical identifier"
+            )
+        design_name = f"{normalized_team_code}_padring"
+    else:
+        design_name = None
     slots = _require_block(block)
     if len(pins) > len(slots):
         raise ConfigError(
@@ -166,6 +175,11 @@ def generate_padring_config(
         )
 
     template_text, lines, entries = read_template(template_path)
+    if design_name is not None:
+        design_lines = [i for i, line in enumerate(lines) if line.strip().startswith("DESIGN ")]
+        if len(design_lines) != 1:
+            raise ConfigError(f"{template_path}: expected exactly one DESIGN directive")
+        lines[design_lines[0]] = f"DESIGN {design_name};"
     by_name = {entry.instance: entry for entry in entries}
 
     if require_complete_template:
@@ -271,6 +285,7 @@ def generate_padring_config(
         "source_template": str(template_path),
         "block": block.upper(),
         "team_code": team_code,
+        "design_name": design_name,
         "pin_count": len(pins),
         "user_slot_count": len(slots),
         "pads": mapping,

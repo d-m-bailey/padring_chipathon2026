@@ -204,8 +204,9 @@ def write_canonical_verilog(
         lines.append(f"  {direction} {pin['name']};")
     lines.append("")
     for ground_slot in ground_slots[1:]:
-        lines.append(f"  tran ({ground_net}, {ground_slot});")
+        lines.append(f"  assign {ground_slot} = {ground_net};")
     lines.append("")
+    macros = parse_lef_files(lef_paths)
     for slot, comp in design.components.items():
         if re.fullmatch(r"[NESW]\d{2}", slot) is None:
             continue
@@ -216,7 +217,7 @@ def write_canonical_verilog(
             connection_map["PAD"] = slot
         elif "ASIG5V" in ports:
             if "ASIG5V" in connection_map:
-                lines.append(f"  tran ({slot}, {connection_map['ASIG5V']});")
+                lines.append(f"  assign {connection_map['ASIG5V']} = {slot};")
             connection_map["ASIG5V"] = slot
         if comp.macro == POWER_CELL:
             connection_map["DVDD"] = slot
@@ -230,5 +231,35 @@ def write_canonical_verilog(
                 connection_map[terminal] = segment_net[slot]
         connections = ", ".join(f".{terminal}({net})" for terminal, net in connection_map.items())
         lines.append(f"  {comp.macro} {slot} ({connections});")
+
+    pad_components = {
+        slot: design.components[slot]
+        for slot in ALL_PHYSICAL_SLOTS
+        if slot in design.components
+    }
+    for instance, comp in design.components.items():
+        if instance in pad_components:
+            continue
+        macro = macros.get(comp.macro)
+        if macro is None:
+            raise ConfigError(f"LEF macro {comp.macro!r} not found for component {instance!r}")
+        nearest_slot = min(
+            pad_components,
+            key=lambda slot: (
+                (pad_components[slot].x - comp.x) ** 2
+                + (pad_components[slot].y - comp.y) ** 2
+            ),
+        )
+        connection_map = {}
+        if "VSS" in macro.pins:
+            connection_map["VSS"] = ground_net
+        if "DVSS" in macro.pins:
+            connection_map["DVSS"] = ground_net
+        if "VDD" in macro.pins:
+            connection_map["VDD"] = segment_net[nearest_slot]
+        if "DVDD" in macro.pins:
+            connection_map["DVDD"] = segment_net[nearest_slot]
+        connections = ", ".join(f".{terminal}({net})" for terminal, net in connection_map.items())
+        lines.append(f"  {comp.macro} {instance} ({connections});")
     lines.extend(["endmodule", ""])
     output_path.write_text("\n".join(lines), encoding="utf-8")

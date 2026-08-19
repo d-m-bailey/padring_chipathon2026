@@ -73,6 +73,8 @@ chipathon-integrate run-padring \
 Padring components retain canonical slot names such as `W01`. The generated
 DEF and Verilog expose user-area terminals such as `W01_A`; project virtual
 DEF terminals use the participant name instead, such as `RST_A`.
+The layout top cell and Verilog module are named `<team-code>_padring`, such as
+`A01_padring`.
 
 The Verilog physical-pad ports use bare canonical names such as `W01`. All
 `VSS`/`DVSS` cell terminals share the canonical DVSS-pad network. Each DVDD pad
@@ -84,6 +86,11 @@ The generated padring DEF has an `INOUT` Metal5 pin at the physical pad
 location for every canonical slot. DVDD and DVSS canonical pins also contain
 their transformed user-area-facing Metal2 LEF geometry and are marked `USE
 POWER` or `USE GROUND`.
+
+The structural Verilog includes every DEF component for LVS, including
+device-containing `fill5`, `brk5`, and corner cells. Their available supply
+ports connect to the common ground and neighboring canonical DVDD segment;
+`brk5` connects only its available VSS port and does not bridge DVDD.
 
 The template selects `fill5` with `FILLER`, selects `brk5` with `BREAKFILLER`,
 and uses a parameterless `BREAK ;` between selected I/O cells. The normal gap

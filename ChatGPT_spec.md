@@ -857,6 +857,11 @@ A01_padring.gds
 A01_pads.csv
 ```
 
+The generated padring top-cell name and structural Verilog module name are
+`<team-code>_padring`. For example, project A01 generates `A01_padring` in the
+CFG, DEF, GDS, and Verilog. The Makefile passes the same derived design name to
+KLayout; `DESIGN_NAME` remains overrideable when required.
+
 The Verilog output is a structural padring module whose I/O-cell instances use
 canonical physical-slot names. It exposes the project-facing cell terminals as
 module ports named `<canonical-pad>_<cell-terminal>`. Break, filler, corner,
@@ -865,8 +870,10 @@ and unused placeholder cells do not create module ports.
 The structural padring Verilog also exposes every physical pad using its bare
 canonical slot name, such as `W01`, `W11`, or `W12`. A digital I/O cell's `PAD`
 terminal connects to that canonical port. Analog pad connectivity is aliased to
-the canonical port with a bidirectional `tran` connection where a separate
-canonical-prefixed project-facing terminal is also exposed.
+the canonical port with a continuous `assign` statement where a separate
+canonical-prefixed project-facing terminal is also exposed. Canonical DVSS pad
+ports are likewise shorted with continuous assignments rather than Verilog
+`tran` primitives.
 
 The padring DEF must expose the same bare canonical physical-pad ports. Every
 canonical slot, including unused placeholders, has an `INOUT` pin rectangle on
@@ -879,6 +886,15 @@ rectangles from that cell's corresponding `DVDD` or `DVSS` LEF terminal. These
 Metal2 shapes face the user area and allow top-level routing to the project.
 DVDD canonical pins use `USE POWER`; DVSS canonical pins use `USE GROUND`.
 Their Metal5 and Metal2 shapes belong to the same canonical DEF pin/net.
+
+The structural Verilog must instantiate every component emitted in the
+padring DEF, not only the 88 canonical I/O cells. GF180 filler and corner cells
+contain devices and therefore cannot be omitted from LVS. Each `fill5` and
+corner instance connects its available `VSS`/`DVSS` terminals to the common
+canonical ground network and its `VDD`/`DVDD` terminals to the local canonical
+power segment. Each `brk5` instance connects its available `VSS` terminal but
+does not reconnect the broken VDD/DVDD rails. Generated DEF and Verilog
+component counts must match.
 
 All `VSS` and `DVSS` terminals connect to one common ground network. Each
 canonical DVSS pad remains a module port, and multiple DVSS pad ports are

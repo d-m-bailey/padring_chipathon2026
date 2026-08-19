@@ -34,7 +34,7 @@ PYTHON ?= python3
 INTEGRATE ?= env PYTHONPATH=$(MAKEFILE_DIR)src $(PYTHON) -m chipathon2026_integration.cli
 KLAYOUT ?= klayout
 DEF2STREAM ?= $(abspath $(MAKEFILE_DIR)../Workshop_CASS/def2stream.py)
-DESIGN_NAME ?= workshop_padring
+DESIGN_NAME ?= $@_padring
 IO_LEF_DIR ?= $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef
 IO_GDS ?= $(TECH_PDK)/libs.ref/gf180mcu_fd_io/gds/gf180mcu_fd_io.gds
 TECH_FILE ?= $(TECH_PDK)/libs.tech/klayout/tech/gf180mcu.lyt

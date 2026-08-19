@@ -37,6 +37,8 @@ def test_generate_a_mapping_preserves_flip_and_comment(full_template, minimal_in
     )
     assert mapping["pads"][0]["slot"] == "W13"
     assert mapping["team_code"] == "A01"
+    assert mapping["design_name"] == "A01_padring"
+    assert "DESIGN A01_padring;" in cfg
     assert mapping["pads"][0]["instance"] == "W13"
     assert mapping["pads"][1]["slot"] == "W14"
     assert "PAD W14 W FLIP gf180mcu_fd_io__bi_t ;" in cfg
