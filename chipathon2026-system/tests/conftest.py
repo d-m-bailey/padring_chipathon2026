@@ -23,15 +23,13 @@ def full_template(tmp_path: Path) -> Path:
         for n in range(1, 23):
             slot = f"{side}{n:02d}"
             cell = "gf180mcu_fd_io__asig_5p0"
-            if slot in {"W11", "E11"}:
-                cell = POWER_CELL
-            elif slot in {"W12", "E12"}:
+            if slot in {"W11", "W12", "E11", "E12"}:
                 cell = GROUND_CELL
             flip = " FLIP" if slot == "W14" else ""
             comment = " # keep me" if slot == "W15" else ""
             lines.append(f"PAD {slot} {side}{flip} {cell} ;{comment}")
             break_name = {
-                "W12": "BRK_W12_W13", "E10": "BRK_E10_E11",
+                "W11": "BRK_W11_W12", "E11": "BRK_E11_E12",
             }.get(slot)
             if break_name:
                 lines.append("BREAK ;")

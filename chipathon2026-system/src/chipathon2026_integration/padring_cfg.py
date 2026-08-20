@@ -81,7 +81,7 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
     break_issues: list[str] = []
     found_breaks: list[str] = []
     expected_boundaries = {
-        "BRK_W12_W13": ("W12", "W13"), "BRK_E10_E11": ("E10", "E11"),
+        "BRK_W11_W12": ("W11", "W12"), "BRK_E11_E12": ("E11", "E12"),
     }
     for name, (before, after) in expected_boundaries.items():
         if before in by_name and after in by_name:
@@ -105,10 +105,10 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
     reserved_issues: list[str] = []
     for side_slots in (("W11", "W12"), ("E11", "E12")):
         if all(slot in by_name for slot in side_slots):
-            cells = {by_name[slot].cell for slot in side_slots}
-            if cells != {POWER_CELL, GROUND_CELL}:
+            cells = [by_name[slot].cell for slot in side_slots]
+            if cells != [GROUND_CELL, GROUND_CELL]:
                 reserved_issues.append(
-                    f"{side_slots[0]}/{side_slots[1]} must contain one {POWER_CELL} and one {GROUND_CELL}; found {sorted(cells)}"
+                    f"{side_slots[0]}/{side_slots[1]} must both use {GROUND_CELL}; found {cells}"
                 )
 
     return {
@@ -256,29 +256,29 @@ def generate_padring_config(
 
     break_entries: list[dict[str, str]] = []
     insertions: list[tuple[int, list[str]]] = []
-    power_count = 0
+    region_has_power = False
+    region_has_ground = False
     for pin_index, pin in enumerate(pins):
         slot = by_name[slots[pin_index]]
-        if pin["io_type"] == "power":
-            power_count += 1
-            if power_count > 1:
-                name = f"BRK_BEFORE_{slot.instance}"
-                insertions.append((slot.line_index, ["BREAK ;"]))
-                break_entries.append({"instance": name, "reason": "repeated_power", "before_slot": slot.instance})
-
-    for slot_name in ("W10", "E13"):
-        if slot_name in slots:
-            pin_index = slots.index(slot_name)
-            if pin_index < len(pins):
-                slot = by_name[slot_name]
-                name = f"BRK_DEFAULT_DVDD_{slot_name}"
-                insertion_index = slot.line_index + 1 if slot_name == "W10" else slot.line_index
-                insertions.append((insertion_index, ["BREAK ;"]))
-                break_entries.append({
-                    "instance": name,
-                    "reason": "actual_project_io_next_to_default_dvdd",
-                    "slot": slot_name,
-                })
+        io_type = pin["io_type"]
+        starts_new_region = (
+            (io_type == "power" and region_has_power)
+            or (io_type == "ground" and region_has_ground)
+        )
+        if starts_new_region:
+            name = f"BRK_BEFORE_{slot.instance}"
+            insertions.append((slot.line_index, ["BREAK ;"]))
+            break_entries.append({
+                "instance": name,
+                "reason": "additional_power_ground_set",
+                "before_slot": slot.instance,
+            })
+            region_has_power = False
+            region_has_ground = False
+        if io_type == "power":
+            region_has_power = True
+        elif io_type == "ground":
+            region_has_ground = True
 
     last_slot = by_name[slots[len(pins) - 1]]
     after_name = f"BRK_AFTER_{block.upper()}"

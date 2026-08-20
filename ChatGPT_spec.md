@@ -272,38 +272,39 @@ E12
 
 These are not general project signal pad slots.
 
-Their exact VSS/VDD assignment should be specified by the physical padframe template.
+All four reserved cells are VSS pads:
 
-Example conceptually:
-
-W11 \= VDDIO  
-W12 \= VSS
-
-but the final polarity/order must be explicitly defined in the padframe template rather than inferred.
+* W11 \= VSS
+* W12 \= VSS
+* E11 \= VSS
+* E12 \= VSS
 
 These cells are owned by the integration template and must not be replaced when translating user pins.
 
-The fixed middle power/ground regions use gf180mcu\_fd\_io\_\_brk5 cells at
+The fixed middle ground regions use gf180mcu\_fd\_io\_\_brk5 cells at
 these two boundaries:
 
-* between W12 and W13;
-* between E10 and E11.
+* between W11 and W12;
+* between E11 and E12.
 
 These two invariant break cells belong in the physical padring template because
 their positions do not depend on participant data.
 
-Each default VSS pad is therefore always separated from any neighboring cell
-other than its paired default VDD pad. There is no fixed break on the opposite
-side of the default VDD pad. A break is added there only when the adjacent slot
-contains an actual project I/O cell; an unused placeholder beside the default
-VDD pad does not cause a break. DVDD pads inherently divide the VDD/DVDD rails
-into distinct electrical segments, and every project ends with a break.
+Each electrically continuous project power region may contain at most one
+project power pad and one project ground pad. A second power pad or a second
+ground pad starts a new region and requires a break immediately before that
+pad. This groups an ordered power/ground sequence into pairs: for example,
+power, ground, power, ground produces a break before the second power pad.
+Every project also ends with a break. DVDD pads inherently divide the VDD/DVDD
+rails into distinct electrical segments.
 
 Additional gf180mcu\_fd\_io\_\_brk5 cells are generated dynamically:
 
 * immediately after the final I/O pad allocated to each project;
-* immediately before the second and every subsequent power pad belonging to a
-  single project.
+* immediately before a power pad when the current region already contains a
+  project power pad;
+* immediately before a ground pad when the current region already contains a
+  project ground pad.
 
 Dynamic break placement belongs in the template-transformation logic because
 project length and participant power-pad count come from info.yaml. A break cell
@@ -679,7 +680,123 @@ Project DEF pins use the participant's pin name followed by one underscore and
 the I/O-cell terminal name, such as `RST_A`. The mapping metadata for every
 such pin also records its canonical padring slot.
 
-The canonical DEF should initially represent the project as if it were placed in the canonical upper-left location.
+Analog project pins are the exception: the project DEF pin uses the user pad
+name from info.yaml without an `_ASIG5V` suffix and uses only the inward-facing
+Metal2 ASIG5V geometry. Analog pads requesting secondary ESD will be handled by
+a later, separately specified integration stage.
+
+Mapped power and ground pads also use their user names from info.yaml. Their
+project DEF pins use the inward-facing Metal2 geometry of the corresponding
+DVDD or DVSS padring pin.
+
+The canonical DEF represents the project in its canonical upper-left
+placement. Its local lower-left coordinate is always `(0, 0)`. Only this
+canonical placement is generated in the current task; transforms to other
+legal top-level locations remain future work.
+
+The generator inputs are:
+
+* the padring-generated top-level DEF;
+* pad mapping metadata;
+* one selected block type;
+* the canonical block lower-left origin in top-level coordinates;
+* block width and height;
+* GF180 I/O LEFs used to associate named terminals with pin geometry and layers.
+
+Origin, width, and height CLI values are specified in microns. The generated
+DEF inherits the padring DEF `UNITS DISTANCE MICRONS` value. Every micron input
+must convert exactly to an integer number of inherited DEF database units;
+non-grid-aligned values are rejected rather than rounded.
+
+The generated DIEAREA is exactly:
+
+```text
+DIEAREA ( 0 0 ) ( <block-width-dbu> <block-height-dbu> ) ;
+```
+
+For every mapped user pad, the generator emits every project-facing I/O-cell
+terminal. Digital terminal names use `<user-pad-name>_<cell-terminal>`, such
+as `RST_A`, `RST_Y`, or `RST_OE`. Directions are inverted relative to the
+padring-facing terminal, while DEF `USE` and other applicable pin properties
+are preserved.
+
+Pin rectangles come from the actual named PINS geometry in the generated
+padring DEF. They must not be positioned again from I/O-cell placement or LEF
+macro dimensions. LEF terminal definitions identify which padring geometry is
+project-facing and which routing layer belongs to the terminal. All qualifying
+rectangles are preserved, on their original routing layers.
+
+All innermost rectangles for a selected terminal must share the same inward
+boundary coordinate: X for west/east pads and Y for north/south pads. A missing
+or non-unique inward boundary is an error. Each rectangle is extended 1.0
+micron into the user block by moving only its project-facing edge:
+
+* west-side pads: increase the rectangle's maximum X by 1 micron;
+* east-side pads: decrease the rectangle's minimum X by 1 micron;
+* north-side pads: decrease the rectangle's minimum Y by 1 micron;
+* south-side pads: increase the rectangle's maximum Y by 1 micron.
+
+The extension is converted to inherited DEF database units. The opposite edge
+of each rectangle remains fixed.
+
+Extended top-level coordinates are translated to project-local coordinates:
+
+```text
+user_x = top_x - block_origin_x
+user_y = top_y - block_origin_y
+```
+
+The mapping output preserves, for each generated rectangle:
+
+* user pin name and I/O-cell terminal;
+* padring instance;
+* canonical physical pad slot;
+* routing layer and inherited DEF properties;
+* original top-level rectangle;
+* extended and translated user rectangle.
+
+Generation fails if a mapped padring instance or required named pin is absent,
+the routing layer is unknown, the project-facing boundary is ambiguous, a
+micron input is not exactly representable in inherited DBU, or any translated
+or extended rectangle lies outside the local DIEAREA.
+
+## **24.1 Canonical user-block slot allocations**
+
+User-block pins advance in the exact order shown below. Within a range, pad
+numbers ascend unless the range explicitly descends. Comma-separated ranges
+are concatenated from left to right.
+
+All origins, dimensions, and blockage coordinates are in microns. `Area` is
+the authoritative usable-area metric for configuration selection; in
+particular, ACE2 removes two 1/16 blocks and their spacing from the enclosing
+square.
+
+| Code | Pin order | Origin | Pin count | X | Y | Area | VSS fixed | Block |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| A | E12-E22, N01-N11 | 350, 1475 | 22 | 1110 | 1110 | 1,232,100 | E12 | — |
+| BV | E12-E22, N01-N05 | 350, 1475 | 16 | 550 | 1110 | 610,500 | E12 | — |
+| BH | E18-E22, N01-N11 | 350, 2035 | 16 | 1110 | 550 | 610,500 | — | — |
+| CH | E12-E17 | 350, 1475 | 6 | 1110 | 550 | 610,500 | E12 | — |
+| CV | N06-N11 | 910, 1475 | 6 | 550 | 1110 | 610,500 | — | — |
+| D | E18-E22, N01-N05 | 350, 2035 | 10 | 550 | 550 | 302,500 | — | — |
+| EV | N06-N11 | 910, 2035 | 6 | 550 | 550 | 302,500 | — | — |
+| EH | E12-E17 | 350, 1475 | 6 | 550 | 550 | 302,500 | E12 | — |
+| ACV | E12-E22, N01-N16 | 350, 1475 | 27 | 1675 | 1110 | 1,859,250 | E12 | — |
+| ACH | E07-E22, N01-N11 | 350, 910 | 27 | 1110 | 1675 | 1,859,250 | E11, E12 | — |
+| ACE | E07-E22, N01-N16 | 350, 910 | 32 | 1675 | 1675 | 2,805,625 | E11, E12 | — |
+| ACE2 | E07-E22, N01-N16, W16-W01, S22-S07 | 350, 350 | 64 | 2235 | 2235 | 5,308,750 | E11, E12, W11, W12 | (0,0)-(560,560) and (1675,1675)-(2235,2235) |
+
+For each rectangle in the `Block` column, the generated user DEF emits both a
+placement blockage and routing blockages covering every routing layer. These
+coordinates are local project coordinates. A dash means no blocked rectangle.
+
+Configuration selection considers project width, height, and required pin
+count. Generate every qualifying non-dominated minimum-area configuration.
+Do not emit a larger-area configuration when a smaller-area configuration
+fits (for example, do not generate ACV when A fits). Preserve distinct
+equal-area placements such as EV and EH when both qualify. Project dimensions
+must fit the usable geometry described by the selected variant, and required
+pins must not exceed its pin count.
 
 # **25\. Transforming projects to other quadrants**
 
@@ -808,17 +925,13 @@ Do not duplicate all physical padring geometry in another YAML file.
 
 The next implementation work should explicitly define:
 
-1\. exact left/right VSS versus project-VDD assignment at positions 11/12;
+1\. transformations from canonical placement to each legal non-canonical physical location;
 
-2\. explicit ordered slot lists for B, C, D, and E block types;
+2\. secondary-ESD cell layout, abstract, connectivity, and placement policy for analog pads;
 
-3\. transformations from canonical placement to each legal physical location;
+3\. any additional block variants beyond the explicit allocations in section 24.1;
 
-4\. exact project-facing terminals for each GF180 I/O cell, taken from authoritative LEF/CDL/Verilog definitions;
-
-5\. whether power and ground should remain participant io\_type entries or be entirely integration-managed;
-
-6\. package-bond mappings from 88 die pads to the two 64-pin package configurations.
+4\. package-bond mappings from 88 die pads to the two 64-pin package configurations.
 
 # **31\. Project-ID padframe build and generated artifacts**
 

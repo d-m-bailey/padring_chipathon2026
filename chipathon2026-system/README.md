@@ -76,14 +76,18 @@ DEF terminals use the participant name instead, such as `RST_A`.
 The layout top cell and Verilog module are named `<team-code>_padring`, such as
 `A01_padring`.
 
-The Verilog physical-pad ports use bare canonical names such as `W01`. E11 and
-W12 are shorted, while west/N01-N11/S01-S11 cell grounds retain W12 and
-east/N12-N22/S12-S22 cell grounds retain E11. Each DVDD pad
+The Verilog physical-pad ports use bare canonical names such as `W01`. E11,
+E12, W11, and W12 are VSS pads and are shorted, while
+west/N01-N11/S01-S11 cell grounds retain W12 and east/N12-N22/S12-S22 cell
+grounds retain E11. Each DVDD pad
 inherently breaks the `VDD`/`DVDD` rails and names its resulting power segment
 with its canonical pad name. `BREAK ;` controls the additional physical
 `brk5` isolation rather than creating the DVDD-pad electrical discontinuity.
-Unpowered regions use unique explicit nets such as `FLOAT_VDD_1`. Every
-generated project ends with a break.
+Unpowered regions use unique explicit nets such as `FLOAT_VDD_1`. Each power
+region contains no more than one project power pad and one project ground pad;
+a repeated power or ground starts a new break-isolated region. Every generated
+project ends with a break. The fixed template breaks are between E11/E12 and
+W11/W12.
 
 The generated padring DEF has an `INOUT` Metal5 pin at the physical pad
 location for every canonical slot. DVDD and DVSS canonical pins also contain

@@ -45,7 +45,7 @@ def test_generate_a_mapping_preserves_flip_and_comment(full_template, minimal_in
     assert "PAD W15 W gf180mcu_fd_io__asig_5p0 ; # keep me" in cfg
     assert "PAD W16 W gf180mcu_fd_io__asig_5p0 ;" in cfg
     assert "PAD W15 W gf180mcu_fd_io__asig_5p0 ; # keep me\nBREAK ;" in cfg
-    assert "PAD W11 W gf180mcu_fd_io__dvdd ;" in cfg
+    assert "PAD W11 W gf180mcu_fd_io__dvss ;" in cfg
     assert "PAD W12 W gf180mcu_fd_io__dvss ;" in cfg
 
 
