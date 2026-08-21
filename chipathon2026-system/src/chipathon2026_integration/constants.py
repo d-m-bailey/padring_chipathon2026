@@ -28,16 +28,35 @@ REQUIRED_TEMPLATE_BREAKS = {
 
 # The explicit list in section 14 is authoritative.  The prose sentence that
 # still says L13 is intentionally not used.
-A_SLOTS = (
-    "W13", "W14", "W15", "W16", "W17", "W18", "W19", "W20", "W21", "W22",
-    "N01", "N02", "N03", "N04", "N05", "N06", "N07", "N08", "N09", "N10", "N11",
-)
+def _slot_ranges(*ranges: str) -> tuple[str, ...]:
+    slots: list[str] = []
+    for value in ranges:
+        side = value[0]
+        start, end = (int(part[1:]) for part in value.split("-"))
+        step = 1 if end >= start else -1
+        slots.extend(f"{side}{number:02d}" for number in range(start, end + step, step))
+    return tuple(slots)
 
+
+# Participant-configurable positions from the definitive project-block table.
+# Fixed VSS positions are deliberately omitted because the template owns them.
+A_SLOTS = _slot_ranges("W13-W22", "N01-N11")
 BLOCK_SLOTS = {
     "A": A_SLOTS,
+    "BV": _slot_ranges("W13-W22", "N01-N05"),
+    "BH": _slot_ranges("W18-W22", "N01-N11"),
+    "CH": _slot_ranges("W13-W17"),
+    "CV": _slot_ranges("N06-N11"),
+    "D": _slot_ranges("W18-W22", "N01-N05"),
+    "EV": _slot_ranges("N06-N11"),
+    "EH": _slot_ranges("W13-W17"),
+    "ACV": _slot_ranges("W13-W22", "N01-N16"),
+    "ACH": _slot_ranges("W07-W10", "W13-W22", "N01-N11"),
+    "ACE": _slot_ranges("W07-W10", "W13-W22", "N01-N16"),
+    "ACE2": _slot_ranges("W07-W10", "W13-W22", "N01-N16", "E16-E13", "E10-E01", "S22-S07"),
 }
 
-UNFINALIZED_BLOCKS = {"B", "C", "D", "E"}
+UNFINALIZED_BLOCKS: set[str] = set()
 
 ALL_PHYSICAL_SLOTS = tuple(
     f"{side}{number:02d}"

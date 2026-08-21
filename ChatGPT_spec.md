@@ -366,57 +366,23 @@ The exact allocation for each block type should be encoded explicitly rather tha
 
 # **14\. Canonical A-block pin sequence**
 
-For the canonical upper-left quadrant, the first user pin from info.yaml starts at L13, where the left side is numbered from bottom to top.
+The definitive A variant has 22 physical interface positions. W12 is a fixed
+VSS position owned by the integration template, leaving these 21 ordered
+participant-configurable positions:
 
-pins\[0\] \-\> L13
-
-The pin sequence then proceeds around the project perimeter.
-
-The intended initial left-side sequence is:
-
-W13  
-W14  
-W15  
-W16  
-W17  
-W18  
-W19  
-W20  
-W21  
-W22
-
-followed by the appropriate top-edge pads.
-
-For an A block with 21 user I/O positions, an example explicit sequence is:
-
-A\_SLOTS \= \[  
-    "W13",  
-    "W14",  
-    "W15",  
-    "W16",  
-    "W17",  
-    "W18",  
-    "W19",  
-    "W20",  
-    "W21",  
-    "W22",
-
-    "N01",  
-    "N02",  
-    "N03",  
-    "N04",  
-    "N05",  
-    "N06",  
-    "N07",  
-    "N08",  
-    "N09",  
-    "N10",  
-    "N11",  
-\]
+```text
+A_SLOTS = [
+    "W13", "W14", "W15", "W16", "W17",
+    "W18", "W19", "W20", "W21", "W22",
+    "N01", "N02", "N03", "N04", "N05", "N06",
+    "N07", "N08", "N09", "N10", "N11",
+]
+```
 
 The exact edge numbering direction is fixed by the production 88-pad template.
-
-The legal slot sequence must be explicitly represented as an ordered list such as A\_SLOTS. That ordered list is authoritative.
+The corresponding configurable lists for every other definitive variant are
+derived from section 24.1 by preserving its order and removing its fixed VSS
+positions. These ordered lists are authoritative for padring generation.
 
 # **15\. YosysHQ padring configuration**
 
@@ -724,20 +690,25 @@ Pin rectangles come from the actual named PINS geometry in the generated
 padring DEF. They must not be positioned again from I/O-cell placement or LEF
 macro dimensions. LEF terminal definitions identify which padring geometry is
 project-facing and which routing layer belongs to the terminal. All qualifying
-rectangles are preserved, on their original routing layers.
+rectangles remain separate and stay on their original routing layers. Their
+span parallel to the DIEAREA boundary is preserved; their span normal to the
+boundary is replaced by the inward stub described below.
 
 All innermost rectangles for a selected terminal must share the same inward
-boundary coordinate: X for west/east pads and Y for north/south pads. A missing
-or non-unique inward boundary is an error. Each rectangle is extended 1.0
-micron into the user block by moving only its project-facing edge:
+boundary coordinate: X for west/east pads and Y for north/south pads. That
+coordinate must equal the corresponding user-block DIEAREA boundary. A missing,
+non-unique, or mismatched boundary is an error. The project DEF omits the
+portion of the original terminal outside the user DIEAREA and emits a 1.0
+micron stub beginning at the boundary and extending into the user block:
 
-* west-side pads: increase the rectangle's maximum X by 1 micron;
-* east-side pads: decrease the rectangle's minimum X by 1 micron;
-* north-side pads: decrease the rectangle's minimum Y by 1 micron;
-* south-side pads: increase the rectangle's maximum Y by 1 micron.
+* west-side pads: boundary X to boundary X + 1 micron;
+* east-side pads: boundary X - 1 micron to boundary X;
+* north-side pads: boundary Y - 1 micron to boundary Y;
+* south-side pads: boundary Y to boundary Y + 1 micron.
 
-The extension is converted to inherited DEF database units. The opposite edge
-of each rectangle remains fixed.
+The extension is converted to inherited DEF database units. For example, each
+W13 DVDD project rectangle begins at local X 0 and ends at local X 1.0 micron,
+while retaining its original Y interval.
 
 Extended top-level coordinates are translated to project-local coordinates:
 
@@ -773,18 +744,18 @@ square.
 
 | Code | Pin order | Origin | Pin count | X | Y | Area | VSS fixed | Block |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| A | E12-E22, N01-N11 | 350, 1475 | 22 | 1110 | 1110 | 1,232,100 | E12 | — |
-| BV | E12-E22, N01-N05 | 350, 1475 | 16 | 550 | 1110 | 610,500 | E12 | — |
-| BH | E18-E22, N01-N11 | 350, 2035 | 16 | 1110 | 550 | 610,500 | — | — |
-| CH | E12-E17 | 350, 1475 | 6 | 1110 | 550 | 610,500 | E12 | — |
+| A | W12-W22, N01-N11 | 350, 1475 | 22 | 1110 | 1110 | 1,232,100 | W12 | — |
+| BV | W12-W22, N01-N05 | 350, 1475 | 16 | 550 | 1110 | 610,500 | W12 | — |
+| BH | W18-W22, N01-N11 | 350, 2035 | 16 | 1110 | 550 | 610,500 | — | — |
+| CH | W12-W17 | 350, 1475 | 6 | 1110 | 550 | 610,500 | W12 | — |
 | CV | N06-N11 | 910, 1475 | 6 | 550 | 1110 | 610,500 | — | — |
-| D | E18-E22, N01-N05 | 350, 2035 | 10 | 550 | 550 | 302,500 | — | — |
+| D | W18-W22, N01-N05 | 350, 2035 | 10 | 550 | 550 | 302,500 | — | — |
 | EV | N06-N11 | 910, 2035 | 6 | 550 | 550 | 302,500 | — | — |
-| EH | E12-E17 | 350, 1475 | 6 | 550 | 550 | 302,500 | E12 | — |
-| ACV | E12-E22, N01-N16 | 350, 1475 | 27 | 1675 | 1110 | 1,859,250 | E12 | — |
-| ACH | E07-E22, N01-N11 | 350, 910 | 27 | 1110 | 1675 | 1,859,250 | E11, E12 | — |
-| ACE | E07-E22, N01-N16 | 350, 910 | 32 | 1675 | 1675 | 2,805,625 | E11, E12 | — |
-| ACE2 | E07-E22, N01-N16, W16-W01, S22-S07 | 350, 350 | 64 | 2235 | 2235 | 5,308,750 | E11, E12, W11, W12 | (0,0)-(560,560) and (1675,1675)-(2235,2235) |
+| EH | W12-W17 | 350, 1475 | 6 | 550 | 550 | 302,500 | W12 | — |
+| ACV | W12-W22, N01-N16 | 350, 1475 | 27 | 1675 | 1110 | 1,859,250 | W12 | — |
+| ACH | W07-W22, N01-N11 | 350, 910 | 27 | 1110 | 1675 | 1,859,250 | W11, W12 | — |
+| ACE | W07-W22, N01-N16 | 350, 910 | 32 | 1675 | 1675 | 2,805,625 | W11, W12 | — |
+| ACE2 | W07-W22, N01-N16, E16-E01, S22-S07 | 350, 350 | 64 | 2235 | 2235 | 5,308,750 | W11, W12, E11, E12 | (0,0)-(560,560) and (1675,1675)-(2235,2235) |
 
 For each rectangle in the `Block` column, the generated user DEF emits both a
 placement blockage and routing blockages covering every routing layer. These
@@ -797,6 +768,28 @@ fits (for example, do not generate ACV when A fits). Preserve distinct
 equal-area placements such as EV and EH when both qualify. Project dimensions
 must fit the usable geometry described by the selected variant, and required
 pins must not exceed its pin count.
+
+The implemented CLI command is `generate-project-def`. It accepts
+`--project-width` and `--project-height` in microns, plus the padring DEF,
+mapping metadata, and I/O LEFs. Without `--variant`, it writes one DEF and one
+interface-mapping YAML for every minimum-area fitting variant into
+`--output-dir`. With `--variant CODE`, it writes only that requested variant
+after verifying that it fits. The default GF180 routing-blockage layer list is
+Metal1 through Metal5 and can be overridden by repeating `--routing-layer`.
+
+The normal Makefile flow derives project width and height from the project's
+GDS rather than requiring manual dimensions. The GDS must have exactly one top
+cell and exactly one rectangle, with no other shapes, directly in that top cell
+on the configured outline layer/datatype (default `0/0`). Rectangle width and
+height are converted to microns using the GDS layout DBU. Those dimensions and
+the participant pin count from info.yaml select every minimum-area fitting
+variant before its variant-specific padring and project DEF are generated.
+`PROJECT_GDS`, `PROJECT_GDS_DIR`, `PROJECT_OUTLINE_LAYER`, and
+`PROJECT_OUTLINE_DATATYPE` are Makefile-overridable.
+
+Mapped slots must be an ordered subsequence of the variant's authoritative pin
+order. This permits fixed VSS slots to remain owned by the integration template
+without forcing them to appear as participant pad mappings.
 
 # **25\. Transforming projects to other quadrants**
 

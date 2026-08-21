@@ -30,10 +30,15 @@ TECH_PDK ?= $(PDK_ROOT)/$(PDK)
 DEF_DBU ?= 0.005
 PAD_MARKER_LAYER ?= 37
 PAD_MARKER_DATATYPE ?= 0
+PROJECT_GDS_DIR ?= gds
+PROJECT_GDS ?=
+PROJECT_OUTLINE_LAYER ?= 0
+PROJECT_OUTLINE_DATATYPE ?= 0
 PYTHON ?= python3
 INTEGRATE ?= env PYTHONPATH=$(MAKEFILE_DIR)src $(PYTHON) -m chipathon2026_integration.cli
 KLAYOUT ?= klayout
 DEF2STREAM ?= $(abspath $(MAKEFILE_DIR)../Workshop_CASS/def2stream.py)
+MEASURE_PROJECT_GDS ?= $(MAKEFILE_DIR)scripts/measure_project_gds.py
 DESIGN_NAME ?= $@_padring
 IO_LEF_DIR ?= $(TECH_PDK)/libs.ref/gf180mcu_fd_io/lef
 IO_GDS ?= $(TECH_PDK)/libs.ref/gf180mcu_fd_io/gds/gf180mcu_fd_io.gds
@@ -60,9 +65,10 @@ help:
 	@echo
 	@echo "Example:"
 	@echo "  make -f chipathon2026-system/Makefile.padframe A01"
+	@echo "  make -f chipathon2026-system/Makefile.padframe project-def-A01"
 	@echo
-	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK KLAYOUT"
-	@echo "Overrideable geometry: DEF_DBU PAD_MARKER_LAYER PAD_MARKER_DATATYPE"
+	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK KLAYOUT PROJECT_GDS_DIR PROJECT_GDS"
+	@echo "Overrideable geometry: DEF_DBU PAD_MARKER_LAYER PAD_MARKER_DATATYPE PROJECT_OUTLINE_LAYER PROJECT_OUTLINE_DATATYPE"
 
 $(DEFAULT_PADRING): $(PADRING_SOURCES)
 	cmake -S $(PADRING_SOURCE_DIR) -B $(PADRING_BUILD_DIR)
@@ -103,3 +109,24 @@ $(DEFAULT_PADRING): $(PADRING_SOURCES)
 		-rd marker_layer=$(PAD_MARKER_LAYER) \
 		-rd marker_datatype=$(PAD_MARKER_DATATYPE) \
 		-r $(DEF2STREAM)
+
+# Build the padring first, measure the project's single top-cell outline
+# rectangle on GDS layer 0/0, then generate every minimum-area fitting
+# canonical project DEF. PROJECT_GDS overrides the default first *.gds found
+# under PROJECT_GDS_DIR/<project-id>/.
+project-def-%: $(INFO_DIR)/%_info.yaml $(TEMPLATE) $(PADRING)
+	@test -n "$(if $(strip $(PROJECT_GDS)),$(PROJECT_GDS),$(firstword $(wildcard $(PROJECT_GDS_DIR)/$*/*.gds)))"
+	@mkdir -p $(OUTPUT_DIR)/$*/project_defs
+	$(KLAYOUT) -b \
+		-rd input_gds=$(if $(strip $(PROJECT_GDS)),$(PROJECT_GDS),$(firstword $(wildcard $(PROJECT_GDS_DIR)/$*/*.gds))) \
+		-rd output_json=$(OUTPUT_DIR)/$*/$*_project_size.json \
+		-rd outline_layer=$(PROJECT_OUTLINE_LAYER) \
+		-rd outline_datatype=$(PROJECT_OUTLINE_DATATYPE) \
+		-r $(MEASURE_PROJECT_GDS)
+	$(INTEGRATE) build-project-defs $< $(TEMPLATE) \
+		--team-code $* \
+		--project-size-json $(OUTPUT_DIR)/$*/$*_project_size.json \
+		--padring $(PADRING) \
+		--tech-pdk $(TECH_PDK) \
+		--output-dir $(OUTPUT_DIR)/$*/project_defs \
+		--def-dbu $(DEF_DBU)

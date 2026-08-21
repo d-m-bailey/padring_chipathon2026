@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import yaml
@@ -12,19 +13,18 @@ from .errors import IntegrationError
 from .info import get_lvs_config_reference, load_info, validate_pins
 from .lef import parse_lef_files, validate_project_terminals
 from .lvs import get_layout_file, load_lvs_config
-from .padring_cfg import audit_physical_template, generate_padring_config, write_mapping
-from .padring_runner import build_padring_command, run_padring
-from .virtual_def import generate_virtual_def
-
-
-def _diearea(value: str) -> tuple[int, int, int, int]:
-    try:
-        parts = tuple(int(x.strip()) for x in value.split(","))
-    except ValueError as exc:
-        raise argparse.ArgumentTypeError("diearea must be x1,y1,x2,y2 in DEF database units") from exc
-    if len(parts) != 4:
-        raise argparse.ArgumentTypeError("diearea must contain exactly four integers")
-    return parts  # type: ignore[return-value]
+from .padring_cfg import audit_physical_template, generate_padring_config, safe_identifier, write_mapping
+from .padring_runner import build_padring_command, required_lef_paths, run_padring
+from .defparse import load_def
+from .virtual_def import (
+    BLOCK_VARIANTS,
+    GF180_ROUTING_LAYERS,
+    generate_project_def,
+    load_mapping,
+    mapped_pads,
+    micron_to_dbu,
+    select_block_variants,
+)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -75,14 +75,28 @@ def parser() -> argparse.ArgumentParser:
     s = sub.add_parser("inspect-lef", help="inspect/validate project-facing GF180 terminals in LEFs")
     s.add_argument("lef", type=Path, nargs="+")
 
-    s = sub.add_parser("generate-virtual-def", help="generate project-side pin constraint DEF from padring DEF and LEFs")
+    s = sub.add_parser("generate-project-def", help="generate canonical project DEF files for all minimal fitting variants")
     s.add_argument("--mapping", type=Path, required=True)
     s.add_argument("--padring-def", type=Path, required=True)
     s.add_argument("--lef", type=Path, nargs="+", required=True)
-    s.add_argument("--diearea", type=_diearea, required=True, help="x1,y1,x2,y2 in DEF database units; spec has not finalized this")
-    s.add_argument("-o", "--output", type=Path, required=True)
-    s.add_argument("--interface-map", type=Path, required=True)
-    s.add_argument("--design", default="chipathon_project_interface")
+    s.add_argument("--project-width", help="project width in microns")
+    s.add_argument("--project-height", help="project height in microns")
+    s.add_argument("--project-size-json", type=Path, help="dimensions written by scripts/measure_project_gds.py")
+    s.add_argument("--variant", choices=tuple(BLOCK_VARIANTS), help="generate one fitting variant instead of all minimum-area variants")
+    s.add_argument("--output-dir", type=Path, required=True)
+    s.add_argument("--design", help="output design-name prefix; defaults to mapping team code")
+    s.add_argument("--routing-layer", action="append", dest="routing_layers", help="routing layer to block; repeat to override GF180 Metal1-Metal5")
+
+    s = sub.add_parser("build-project-defs", help="select variants and build their padring and canonical project DEFs")
+    s.add_argument("info_yaml", type=Path)
+    s.add_argument("template_cfg", type=Path)
+    s.add_argument("--team-code", required=True)
+    s.add_argument("--project-size-json", type=Path, required=True)
+    s.add_argument("--padring", type=Path, required=True)
+    s.add_argument("--tech-pdk", type=Path, required=True)
+    s.add_argument("--output-dir", type=Path, required=True)
+    s.add_argument("--def-dbu", type=float, default=0.005)
+    s.add_argument("--routing-layer", action="append", dest="routing_layers")
 
     s = sub.add_parser("show-config", help="show source-of-truth semantic constants")
     return p
@@ -169,20 +183,134 @@ def main(argv: list[str] | None = None) -> int:
             print(yaml.safe_dump(report, sort_keys=False), end="")
             return 1 if missing else 0
 
-        if args.command == "generate-virtual-def":
-            text, metadata = generate_virtual_def(
-                mapping_path=args.mapping,
-                padring_def=args.padring_def,
-                lef_paths=args.lef,
-                diearea=args.diearea,
-                design_name=args.design,
+        if args.command == "generate-project-def":
+            mapping = load_mapping(args.mapping)
+            pins = mapped_pads(mapping)
+            design = load_def(args.padring_def)
+            if args.project_size_json is not None:
+                if args.project_width is not None or args.project_height is not None:
+                    raise IntegrationError(
+                        "use either --project-size-json or --project-width/--project-height, not both"
+                    )
+                try:
+                    size_data = json.loads(args.project_size_json.read_text(encoding="utf-8"))
+                    project_width = size_data["width_microns"]
+                    project_height = size_data["height_microns"]
+                except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+                    raise IntegrationError(f"cannot read project size JSON {args.project_size_json}: {exc}") from exc
+            else:
+                if args.project_width is None or args.project_height is None:
+                    raise IntegrationError(
+                        "provide --project-size-json or both --project-width and --project-height"
+                    )
+                project_width, project_height = args.project_width, args.project_height
+            micron_to_dbu(project_width, design.units, "project width")
+            micron_to_dbu(project_height, design.units, "project height")
+            fitting = select_block_variants(
+                project_width=project_width,
+                project_height=project_height,
+                pin_count=len(pins),
             )
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(text, encoding="utf-8")
-            args.interface_map.parent.mkdir(parents=True, exist_ok=True)
-            args.interface_map.write_text(yaml.safe_dump(metadata, sort_keys=False), encoding="utf-8")
-            print(f"Wrote virtual DEF:    {args.output}")
-            print(f"Wrote interface map:  {args.interface_map}")
+            if args.variant:
+                selected = BLOCK_VARIANTS[args.variant]
+                if selected not in fitting:
+                    if (
+                        selected.width < Decimal(str(project_width))
+                        or selected.height < Decimal(str(project_height))
+                        or len(selected.slots) - len(selected.vss_fixed) < len(pins)
+                    ):
+                        raise IntegrationError(
+                            f"variant {selected.code} does not fit the requested project dimensions and pin count"
+                        )
+                variants = (selected,)
+            else:
+                variants = fitting
+            base_name = safe_identifier(args.design or mapping.get("team_code") or "chipathon_project")
+            args.output_dir.mkdir(parents=True, exist_ok=True)
+            layers = tuple(args.routing_layers or GF180_ROUTING_LAYERS)
+            for variant in variants:
+                output = args.output_dir / f"{base_name}_{variant.code}.def"
+                interface_map = args.output_dir / f"{base_name}_{variant.code}_interface.yaml"
+                text, metadata = generate_project_def(
+                    mapping_path=args.mapping,
+                    padring_def=args.padring_def,
+                    lef_paths=args.lef,
+                    variant_code=variant.code,
+                    design_name=f"{base_name}_{variant.code}",
+                    routing_layers=layers,
+                )
+                output.write_text(text, encoding="utf-8")
+                interface_map.write_text(yaml.safe_dump(metadata, sort_keys=False), encoding="utf-8")
+                print(f"Wrote project DEF:    {output}")
+                print(f"Wrote interface map:  {interface_map}")
+            return 0
+
+        if args.command == "build-project-defs":
+            info = load_info(args.info_yaml)
+            pins = validate_pins(info)
+            try:
+                size_data = json.loads(args.project_size_json.read_text(encoding="utf-8"))
+                project_width = size_data["width_microns"]
+                project_height = size_data["height_microns"]
+            except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+                raise IntegrationError(f"cannot read project size JSON {args.project_size_json}: {exc}") from exc
+            variants = select_block_variants(
+                project_width=project_width,
+                project_height=project_height,
+                pin_count=len(pins),
+            )
+            layers = tuple(args.routing_layers or GF180_ROUTING_LAYERS)
+            lef_paths = required_lef_paths(args.tech_pdk)
+            args.output_dir.mkdir(parents=True, exist_ok=True)
+            selection_path = args.output_dir / f"{args.team_code}_selected_variants.json"
+            selection_path.write_text(json.dumps({
+                "project_size": size_data,
+                "participant_pin_count": len(pins),
+                "selected_variants": [variant.code for variant in variants],
+            }, indent=2) + "\n", encoding="utf-8")
+            for variant in variants:
+                variant_dir = args.output_dir / variant.code
+                cfg_path = variant_dir / f"{args.team_code}_{variant.code}_padring.cfg"
+                mapping_path = variant_dir / f"{args.team_code}_{variant.code}_pad_map.yaml"
+                def_path = variant_dir / f"{args.team_code}_{variant.code}_padring.def"
+                svg_path = variant_dir / f"{args.team_code}_{variant.code}_padring.svg"
+                verilog_path = variant_dir / f"{args.team_code}_{variant.code}_padring.v"
+                cfg, mapping = generate_padring_config(
+                    info=info,
+                    info_path=args.info_yaml,
+                    template_path=args.template_cfg,
+                    block=variant.code,
+                    team_code=f"{args.team_code}_{variant.code}",
+                )
+                variant_dir.mkdir(parents=True, exist_ok=True)
+                cfg_path.write_text(cfg, encoding="utf-8")
+                write_mapping(mapping_path, mapping)
+                run_padring(
+                    padring_exe=args.padring,
+                    tech_pdk=args.tech_pdk,
+                    cfg=cfg_path,
+                    output_def=def_path,
+                    output_svg=svg_path,
+                    output_verilog=verilog_path,
+                    mapping_path=mapping_path,
+                    def_dbu=args.def_dbu,
+                )
+                project_text, interface = generate_project_def(
+                    mapping_path=mapping_path,
+                    padring_def=def_path,
+                    lef_paths=lef_paths,
+                    variant_code=variant.code,
+                    design_name=f"{args.team_code}_{variant.code}",
+                    routing_layers=layers,
+                )
+                interface["project_gds_size"] = size_data
+                interface["participant_pin_count"] = len(pins)
+                project_path = variant_dir / f"{args.team_code}_{variant.code}.def"
+                interface_path = variant_dir / f"{args.team_code}_{variant.code}_interface.yaml"
+                project_path.write_text(project_text, encoding="utf-8")
+                interface_path.write_text(yaml.safe_dump(interface, sort_keys=False), encoding="utf-8")
+                print(f"Wrote {variant.code} project DEF: {project_path}")
+            print(f"Wrote variant selection: {selection_path}")
             return 0
 
         if args.command == "show-config":
@@ -190,6 +318,16 @@ def main(argv: list[str] | None = None) -> int:
                 "spec_blob_sha": SPEC_BLOB_SHA,
                 "io_cells": IO_CELLS,
                 "A_SLOTS": list(A_SLOTS),
+                "project_def_variants": {
+                    code: {
+                        "slots": list(variant.slots),
+                        "origin_microns": [str(value) for value in variant.origin],
+                        "size_microns": [str(variant.width), str(variant.height)],
+                        "area": variant.area,
+                        "vss_fixed": list(variant.vss_fixed),
+                    }
+                    for code, variant in BLOCK_VARIANTS.items()
+                },
                 "project_terminals": {k: list(v) for k, v in CELL_PROJECT_TERMINALS.items()},
             }, sort_keys=False), end="")
             return 0

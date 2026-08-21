@@ -9,14 +9,14 @@ Python implementation recreated from the live `ChatGPT_spec.md` in
 - Require `project.lvs_config` and read the existing cf-precheck JSON format.
 - Resolve `$KEY`, `${KEY}`, and `$UPRJ_ROOT` references in `LAYOUT_FILE`.
 - Map the documented `io_type` values to GF180MCU I/O cells.
-- Use the explicit authoritative A-block sequence:
-  `W13..W22, N01..N11`.
+- Use the definitive block-variant slot orders. The A participant sequence is
+  `W13..W22, N01..N11`; fixed VSS slot W12 remains template-owned.
 - Parse a YosysHQ padring `.cfg` as the sole physical-geometry source.
 - Require immutable physical slot instance names `N01..N22`, `E01..E22`,
   `S01..S22`, `W01..W22` for production generation.
 - Preserve unrelated PAD entries, comments, side, `FLIP`, AREA/GRID/CORNER/
   FILLER/LOC/SPACE directives.
-- Replace only selected A-block user slots and make unused A slots
+- Replace only selected block-variant user slots and make unused selected slots
   `gf180mcu_fd_io__asig_5p0` placeholders.
 - Detect malformed YAML, unsupported types, duplicate user pins, missing or
   illegal `secondary_esd`, too many pins, sanitization collisions, missing
@@ -113,11 +113,12 @@ coordinates are the transformed center of the single square on GDS layer
 `37/0` in each I/O macro, in microns; they are not inferred from the LEF macro
 bounding box.
 
-To generate the project-side virtual DEF, supply the canonical block DIEAREA
-once integration has chosen it:
+To generate canonical project DEFs, provide the implemented project dimensions
+in microns. The command selects every minimum-area fitting configuration and
+writes one DEF and one interface-mapping YAML per selected variant:
 
 ```bash
-chipathon-integrate generate-virtual-def \
+chipathon-integrate generate-project-def \
   --mapping build/project_pad_map.yaml \
   --padring-def build/project_padring.def \
   --lef "$TECH_PDK"/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__in_c.lef \
@@ -125,13 +126,32 @@ chipathon-integrate generate-virtual-def \
         "$TECH_PDK"/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__bi_t.lef \
         "$TECH_PDK"/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__bi_24t.lef \
         "$TECH_PDK"/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__asig_5p0.lef \
-  --diearea 0,0,1467500,1467500 \
-  -o build/project_interface.def \
-  --interface-map build/project_interface.yaml
+        "$TECH_PDK"/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__dvdd.lef \
+        "$TECH_PDK"/libs.ref/gf180mcu_fd_io/lef/gf180mcu_fd_io__dvss.lef \
+  --project-width 500 \
+  --project-height 500 \
+  --output-dir build/project_defs
 ```
 
-The numeric DIEAREA above is only command syntax illustration; it is **not** a
-specification value.
+Use `--variant CODE` to request one particular fitting variant. By default,
+GF180 Metal1 through Metal5 are blocked wherever a variant defines a blockage;
+repeat `--routing-layer` to override that layer list. Coordinates are accepted
+in microns and must be exactly representable in the padring DEF database grid.
+Pin geometry is read from named padring DEF pins. Each project pin starts at
+the I/O terminal's innermost block boundary, extends 1 micron into the block,
+and is translated to a local DIEAREA beginning at `(0,0)`.
+
+The Makefile derives those dimensions automatically from the single top-cell
+rectangle on GDS layer `0/0` and combines them with the info.yaml pin count:
+
+```bash
+make -f chipathon2026-system/Makefile.padframe project-def-A01
+```
+
+By default it uses the first `gds/A01/*.gds`. Override that with
+`PROJECT_GDS=/path/to/project.gds`; the outline layer is overrideable with
+`PROJECT_OUTLINE_LAYER` and `PROJECT_OUTLINE_DATATYPE`. One variant-specific
+padring and project DEF are written for every minimum-area fitting block type.
 
 ## Download flow
 
