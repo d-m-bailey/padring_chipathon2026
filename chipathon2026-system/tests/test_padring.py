@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from chipathon2026_integration.constants import A_SLOTS
-from chipathon2026_integration.errors import ConfigError, NotFinalizedError
+from chipathon2026_integration.errors import ConfigError
 from chipathon2026_integration.padring_cfg import audit_physical_template, generate_padring_config, safe_identifier
 
 
@@ -83,7 +83,7 @@ def test_break_inserted_before_second_power_pad(full_template, minimal_info, tmp
         info=minimal_info, info_path=tmp_path/"i.yaml", template_path=full_template
     )
     assert "BREAK ;\nPAD W15 W gf180mcu_fd_io__dvdd ; # keep me" in cfg
-    assert any(item["reason"] == "repeated_power" for item in mapping["breaks"])
+    assert any(item["reason"] == "additional_power_ground_set" for item in mapping["breaks"])
 
 
 def test_too_many_a_pins(full_template, minimal_info, tmp_path):
@@ -92,9 +92,11 @@ def test_too_many_a_pins(full_template, minimal_info, tmp_path):
         generate_padring_config(info=minimal_info, info_path=tmp_path/"i.yaml", template_path=full_template)
 
 
-def test_b_block_is_not_finalized(full_template, minimal_info, tmp_path):
-    with pytest.raises(NotFinalizedError):
-        generate_padring_config(info=minimal_info, info_path=tmp_path/"i.yaml", template_path=full_template, block="B")
+def test_definitive_bv_block_slots(full_template, minimal_info, tmp_path):
+    _cfg, mapping = generate_padring_config(
+        info=minimal_info, info_path=tmp_path/"i.yaml", template_path=full_template, block="BV"
+    )
+    assert [pad["slot"] for pad in mapping["pads"][:3]] == ["W13", "W14", "W15"]
 
 
 def test_legacy_template_rejected(tmp_path, minimal_info):

@@ -3,8 +3,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from chipathon2026_integration.errors import NotFinalizedError
-from chipathon2026_integration.virtual_def import generate_virtual_def
+from chipathon2026_integration.errors import ConfigError
+from chipathon2026_integration.virtual_def import (
+    BLOCK_VARIANTS,
+    generate_project_def,
+    micron_to_dbu,
+    select_block_variants,
+)
 
 
 LEF = r'''
@@ -13,6 +18,7 @@ MACRO gf180mcu_fd_io__in_c
   SIZE 10 BY 20 ;
   PIN PU
     DIRECTION INPUT ;
+    USE SIGNAL ;
     PORT
       LAYER Metal3 ;
       RECT 1 2 2 3 ;
@@ -20,20 +26,15 @@ MACRO gf180mcu_fd_io__in_c
   END PU
   PIN PD
     DIRECTION INPUT ;
+    USE SIGNAL ;
     PORT
       LAYER Metal3 ;
       RECT 3 2 4 3 ;
     END
   END PD
-  PIN PAD
-    DIRECTION INPUT ;
-    PORT
-      LAYER Metal5 ;
-      RECT 0 0 10 1 ;
-    END
-  END PAD
   PIN Y
     DIRECTION OUTPUT ;
+    USE SIGNAL ;
     PORT
       LAYER Metal3 ;
       RECT 5 2 6 3 ;
@@ -43,23 +44,37 @@ END gf180mcu_fd_io__in_c
 '''
 
 
-def setup_files(tmp_path: Path):
+def setup_files(tmp_path: Path, *, outside: bool = False):
     mapping = {
-        "pads": [
-            {"pin_index": 0, "pin_name": "reset_n", "slot": "W13", "instance": "W13", "io_type": "input_cmos", "cell": "gf180mcu_fd_io__in_c"}
-        ]
+        "team_code": "T01",
+        "pads": [{
+            "pin_index": 0, "pin_name": "reset_n", "slot": "W18", "instance": "W18",
+            "io_type": "input_cmos", "cell": "gf180mcu_fd_io__in_c",
+        }],
     }
     mp = tmp_path / "map.yaml"
     mp.write_text(yaml.safe_dump(mapping), encoding="utf-8")
+    bottom = 2034000 if outside else 2040000
     dp = tmp_path / "ring.def"
-    dp.write_text('''
+    dp.write_text(f'''
 VERSION 5.8 ;
 DESIGN ring ;
 UNITS DISTANCE MICRONS 1000 ;
-DIEAREA ( 0 0 ) ( 100000 100000 ) ;
+DIEAREA ( 0 0 ) ( 2935000 2935000 ) ;
 COMPONENTS 1 ;
-- W13 gf180mcu_fd_io__in_c + FIXED ( 10000 20000 ) N ;
+- W18 gf180mcu_fd_io__in_c + FIXED ( 0 0 ) N ;
 END COMPONENTS
+PINS 3 ;
+- W18_PU + NET W18_PU + DIRECTION INPUT + USE SIGNAL
+  + LAYER Metal3 ( 349500 {bottom} ) ( 350000 2040500 )
+  + FIXED ( 0 0 ) N ;
+- W18_PD + NET W18_PD + DIRECTION INPUT + USE SIGNAL
+  + LAYER Metal3 ( 349500 2041000 ) ( 350000 2041500 )
+  + FIXED ( 0 0 ) N ;
+- W18_Y + NET W18_Y + DIRECTION OUTPUT + USE SIGNAL
+  + LAYER Metal3 ( 349500 2042000 ) ( 350000 2042500 )
+  + FIXED ( 0 0 ) N ;
+END PINS
 END DESIGN
 ''', encoding="utf-8")
     lp = tmp_path / "in_c.lef"
@@ -67,25 +82,54 @@ END DESIGN
     return mp, dp, lp
 
 
-def test_virtual_def_requires_explicit_diearea(tmp_path):
-    mp, dp, lp = setup_files(tmp_path)
-    with pytest.raises(NotFinalizedError, match="DIEAREA"):
-        generate_virtual_def(mapping_path=mp, padring_def=dp, lef_paths=[lp], diearea=None)
+def test_minimal_variant_selection_preserves_equal_area_placements():
+    variants = select_block_variants(project_width="500", project_height="500", pin_count=5)
+    assert [variant.code for variant in variants] == ["D", "EV", "EH"]
+    assert select_block_variants(project_width="1000", project_height="1000", pin_count=21)[0].code == "A"
 
 
-def test_virtual_def_exposes_control_and_data_terminals(tmp_path):
+def test_micron_conversion_rejects_inexact_values():
+    assert micron_to_dbu("1.005", 200, "value") == 201
+    with pytest.raises(ConfigError, match="not exactly representable"):
+        micron_to_dbu("1.001", 200, "value")
+
+
+def test_project_def_uses_padring_pin_geometry_and_extends_inward(tmp_path):
     mp, dp, lp = setup_files(tmp_path)
-    text, meta = generate_virtual_def(
-        mapping_path=mp,
-        padring_def=dp,
-        lef_paths=[lp],
-        diearea=(0, 0, 50000, 50000),
+    text, metadata = generate_project_def(
+        mapping_path=mp, padring_def=dp, lef_paths=[lp], variant_code="D", design_name="T01_D"
     )
-    assert "PINS 3 ;" in text
-    assert "reset_n_PU" in text
-    assert "reset_n_PD" in text
-    assert "reset_n_Y" in text
-    # PU/PD are inputs to the I/O cell, hence outputs from the project.
-    assert any(p["project_pin"] == "reset_n_PU" and p["direction"] == "OUTPUT" for p in meta["pins"])
-    # Y is output from the I/O cell, hence input to the project.
-    assert any(p["project_pin"] == "reset_n_Y" and p["direction"] == "INPUT" for p in meta["pins"])
+    assert "DIEAREA ( 0 0 ) ( 550000 550000 ) ;" in text
+    assert "reset_n_PU + NET reset_n_PU + DIRECTION OUTPUT + USE SIGNAL" in text
+    # The outside portion is omitted and a 1-micron stub begins at local X zero.
+    assert "+ LAYER Metal3 ( 0 5000 ) ( 1000 5500 )" in text
+    rectangle = metadata["pins"][0]["rectangles"][0]
+    assert rectangle["top_level"] == [349500, 2040000, 350000, 2040500]
+    assert rectangle["translated_user"] == [0, 5000, 1000, 5500]
+
+
+def test_out_of_bounds_geometry_is_rejected(tmp_path):
+    mp, dp, lp = setup_files(tmp_path, outside=True)
+    with pytest.raises(ConfigError, match="outside user block"):
+        generate_project_def(mapping_path=mp, padring_def=dp, lef_paths=[lp], variant_code="D")
+
+
+def test_ace2_blocks_placement_and_every_routing_layer(tmp_path):
+    mp = tmp_path / "map.yaml"
+    mp.write_text("pads: []\n", encoding="utf-8")
+    dp = tmp_path / "ring.def"
+    dp.write_text("VERSION 5.8 ;\nDESIGN ring ;\nUNITS DISTANCE MICRONS 200 ;\nEND DESIGN\n", encoding="utf-8")
+    text, metadata = generate_project_def(mapping_path=mp, padring_def=dp, lef_paths=[], variant_code="ACE2")
+    assert "BLOCKAGES 12 ;" in text
+    assert text.count("- PLACEMENT + RECT") == 2
+    assert text.count("- LAYER Metal") == 10
+    assert metadata["usable_area"] == 5_308_750
+    assert metadata["blockages"][1] == [335000, 335000, 447000, 447000]
+
+
+def test_definitive_ace2_slot_order_and_corrected_blockage():
+    variant = BLOCK_VARIANTS["ACE2"]
+    assert variant.slots[-32:] == tuple(
+        [f"E{i:02d}" for i in range(16, 0, -1)] + [f"S{i:02d}" for i in range(22, 6, -1)]
+    )
+    assert variant.blockages[1] == (1675, 1675, 2235, 2235)
