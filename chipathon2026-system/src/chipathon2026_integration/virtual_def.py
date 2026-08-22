@@ -223,6 +223,18 @@ def _invert_direction(direction: str | None) -> str:
     return {"INPUT": "OUTPUT", "OUTPUT": "INPUT"}.get(value, value)
 
 
+def _project_terminal_name(io_type: str, user_name: str, terminal: str) -> str:
+    base_name = safe_identifier(user_name)
+    if io_type in {"input_cmos", "input_schmitt"} and terminal == "Y":
+        return base_name
+    if io_type in {"bidirectional", "bidirectional_24ma"}:
+        if terminal == "Y":
+            return f"{base_name}_IN"
+        if terminal == "A":
+            return f"{base_name}_OUT"
+    return f"{base_name}_{terminal}"
+
+
 def _rect_list(rect: DefRect) -> list[int]:
     return [rect.x1, rect.y1, rect.x2, rect.y2]
 
@@ -287,7 +299,15 @@ def generate_project_def(
             cell_terminals = CELL_PROJECT_TERMINALS.get(cell)
             if cell_terminals is None:
                 raise ConfigError(f"no project-facing terminal policy for cell {cell!r}")
-            terminals = tuple((terminal, f"{user_name}_{terminal}", f"{slot}_{terminal}", False) for terminal in cell_terminals)
+            terminals = tuple(
+                (
+                    terminal,
+                    _project_terminal_name(str(io_type), user_name, terminal),
+                    f"{slot}_{terminal}",
+                    False,
+                )
+                for terminal in cell_terminals
+            )
 
         for terminal, raw_name, source_name, metal2_only in terminals:
             lef_pin = _lef_terminal(macros, cell, terminal)

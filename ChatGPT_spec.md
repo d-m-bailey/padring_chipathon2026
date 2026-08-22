@@ -681,10 +681,12 @@ DIEAREA ( 0 0 ) ( <block-width-dbu> <block-height-dbu> ) ;
 ```
 
 For every mapped user pad, the generator emits every project-facing I/O-cell
-terminal. Digital terminal names use `<user-pad-name>_<cell-terminal>`, such
-as `RST_A`, `RST_Y`, or `RST_OE`. Directions are inverted relative to the
-padring-facing terminal, while DEF `USE` and other applicable pin properties
-are preserved.
+terminal. Input-pad `Y` terminals use the bare user pad name, such as `RST`,
+rather than `RST_Y`. For bidirectional pads, `Y` uses `<user-pad-name>_IN` and
+`A` uses `<user-pad-name>_OUT`. Other digital terminals retain
+`<user-pad-name>_<cell-terminal>`, such as `RST_PU` or `DATA_OE`. Directions
+are inverted relative to the padring-facing terminal, while DEF `USE` and
+other applicable pin properties are preserved.
 
 Pin rectangles come from the actual named PINS geometry in the generated
 padring DEF. They must not be positioned again from I/O-cell placement or LEF

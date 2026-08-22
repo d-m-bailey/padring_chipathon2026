@@ -6,6 +6,7 @@ import yaml
 from chipathon2026_integration.errors import ConfigError
 from chipathon2026_integration.virtual_def import (
     BLOCK_VARIANTS,
+    _project_terminal_name,
     generate_project_def,
     micron_to_dbu,
     select_block_variants,
@@ -94,6 +95,15 @@ def test_micron_conversion_rejects_inexact_values():
         micron_to_dbu("1.001", 200, "value")
 
 
+def test_project_terminal_names():
+    assert _project_terminal_name("input_cmos", "RST", "Y") == "RST"
+    assert _project_terminal_name("input_schmitt", "RST", "PU") == "RST_PU"
+    assert _project_terminal_name("bidirectional", "DATA", "Y") == "DATA_IN"
+    assert _project_terminal_name("bidirectional", "DATA", "A") == "DATA_OUT"
+    assert _project_terminal_name("bidirectional", "data[7]", "Y") == "data_7_IN"
+    assert _project_terminal_name("bidirectional_24ma", "DATA", "OE") == "DATA_OE"
+
+
 def test_project_def_uses_padring_pin_geometry_and_extends_inward(tmp_path):
     mp, dp, lp = setup_files(tmp_path)
     text, metadata = generate_project_def(
@@ -101,6 +111,8 @@ def test_project_def_uses_padring_pin_geometry_and_extends_inward(tmp_path):
     )
     assert "DIEAREA ( 0 0 ) ( 550000 550000 ) ;" in text
     assert "reset_n_PU + NET reset_n_PU + DIRECTION OUTPUT + USE SIGNAL" in text
+    assert "- reset_n + NET reset_n + DIRECTION INPUT + USE SIGNAL" in text
+    assert "reset_n_Y" not in text
     # The outside portion is omitted and a 1-micron stub begins at local X zero.
     assert "+ LAYER Metal3 ( 0 5000 ) ( 1000 5500 )" in text
     rectangle = metadata["pins"][0]["rectangles"][0]

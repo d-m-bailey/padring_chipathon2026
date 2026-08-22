@@ -140,6 +140,9 @@ in microns and must be exactly representable in the padring DEF database grid.
 Pin geometry is read from named padring DEF pins. Each project pin starts at
 the I/O terminal's innermost block boundary, extends 1 micron into the block,
 and is translated to a local DIEAREA beginning at `(0,0)`.
+Input-pad `Y` terminals use the bare user pad name. Bidirectional `Y` and `A`
+terminals use `<pad>_IN` and `<pad>_OUT`, respectively; other terminal names
+retain their cell-terminal suffix.
 
 The Makefile derives those dimensions automatically from the single top-cell
 rectangle on GDS layer `0/0` and combines them with the info.yaml pin count:
