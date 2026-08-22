@@ -12,7 +12,7 @@ from .constants import A_SLOTS, CELL_PROJECT_TERMINALS, IO_CELLS, SPEC_BLOB_SHA
 from .errors import IntegrationError
 from .info import get_lvs_config_reference, load_info, validate_pins
 from .lef import parse_lef_files, validate_project_terminals
-from .lvs import get_layout_file, load_lvs_config
+from .lvs import get_layout_file, load_lvs_config, resolve_downloaded_gds
 from .padring_cfg import audit_physical_template, generate_padring_config, safe_identifier, write_mapping
 from .padring_runner import build_padring_command, required_lef_paths, run_padring
 from .defparse import load_def
@@ -38,6 +38,13 @@ def parser() -> argparse.ArgumentParser:
     s = sub.add_parser("inspect-lvs", help="resolve project.lvs_config and LAYOUT_FILE")
     s.add_argument("info_yaml", type=Path)
     s.add_argument("--uprj-root")
+
+    s = sub.add_parser("resolve-project-gds", help="resolve the downloaded GDS selected by lvs_config.json")
+    s.add_argument("--lvs-config", type=Path)
+    s.add_argument("--gds-dir", type=Path, required=True)
+    s.add_argument("--team-code", required=True)
+    s.add_argument("--project-gds", type=Path, help="explicit override")
+    s.add_argument("--output", type=Path, required=True)
 
     s = sub.add_parser("audit-template", help="check an immutable 88-slot padring template")
     s.add_argument("template_cfg", type=Path)
@@ -125,6 +132,27 @@ def main(argv: list[str] | None = None) -> int:
             config = load_lvs_config(path)
             print(f"lvs_config: {path}")
             print(f"LAYOUT_FILE: {get_layout_file(config, uprj_root=args.uprj_root)}")
+            return 0
+
+        if args.command == "resolve-project-gds":
+            if args.project_gds is not None:
+                gds_path = args.project_gds
+                source = "PROJECT_GDS override"
+            else:
+                if args.lvs_config is None:
+                    raise IntegrationError("--lvs-config is required unless --project-gds is supplied")
+                config = load_lvs_config(args.lvs_config)
+                gds_path = resolve_downloaded_gds(config, team=args.team_code, gds_dir=args.gds_dir)
+                source = str(args.lvs_config)
+            if not gds_path.is_file():
+                raise IntegrationError(f"project GDS not found: {gds_path}")
+            result = {
+                "project_gds": str(gds_path.resolve()),
+                "selection_source": source,
+            }
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+            print(f"Resolved project GDS: {gds_path}")
             return 0
 
         if args.command == "audit-template":

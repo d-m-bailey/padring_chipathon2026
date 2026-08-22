@@ -32,6 +32,7 @@ PAD_MARKER_LAYER ?= 37
 PAD_MARKER_DATATYPE ?= 0
 PROJECT_GDS_DIR ?= gds
 PROJECT_GDS ?=
+PROJECT_LVS_CONFIG ?=
 PROJECT_OUTLINE_LAYER ?= 0
 PROJECT_OUTLINE_DATATYPE ?= 0
 PYTHON ?= python3
@@ -67,7 +68,7 @@ help:
 	@echo "  make -f chipathon2026-system/Makefile.padframe A01"
 	@echo "  make -f chipathon2026-system/Makefile.padframe project-def-A01"
 	@echo
-	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK KLAYOUT PROJECT_GDS_DIR PROJECT_GDS"
+	@echo "Overrideable paths: INFO_DIR OUTPUT_DIR TEMPLATE PADRING TECH_PDK KLAYOUT PROJECT_GDS_DIR PROJECT_GDS PROJECT_LVS_CONFIG"
 	@echo "Overrideable geometry: DEF_DBU PAD_MARKER_LAYER PAD_MARKER_DATATYPE PROJECT_OUTLINE_LAYER PROJECT_OUTLINE_DATATYPE"
 
 $(DEFAULT_PADRING): $(PADRING_SOURCES)
@@ -112,13 +113,17 @@ $(DEFAULT_PADRING): $(PADRING_SOURCES)
 
 # Build the padring first, measure the project's single top-cell outline
 # rectangle on GDS layer 0/0, then generate every minimum-area fitting
-# canonical project DEF. PROJECT_GDS overrides the default first *.gds found
-# under PROJECT_GDS_DIR/<project-id>/.
+# canonical project DEF. The selected GDS filename comes from LAYOUT_FILE in
+# INFO_DIR/<project-id>_lvs_config.json. PROJECT_GDS remains an explicit override.
 project-def-%: $(INFO_DIR)/%_info.yaml $(TEMPLATE) $(PADRING)
-	@test -n "$(if $(strip $(PROJECT_GDS)),$(PROJECT_GDS),$(firstword $(wildcard $(PROJECT_GDS_DIR)/$*/*.gds)))"
 	@mkdir -p $(OUTPUT_DIR)/$*/project_defs
+	$(INTEGRATE) resolve-project-gds \
+		$(if $(strip $(PROJECT_GDS)),--project-gds $(PROJECT_GDS),--lvs-config $(if $(strip $(PROJECT_LVS_CONFIG)),$(PROJECT_LVS_CONFIG),$(INFO_DIR)/$*_lvs_config.json)) \
+		--gds-dir $(PROJECT_GDS_DIR) \
+		--team-code $* \
+		--output $(OUTPUT_DIR)/$*/$*_project_gds.json
 	$(KLAYOUT) -b \
-		-rd input_gds=$(if $(strip $(PROJECT_GDS)),$(PROJECT_GDS),$(firstword $(wildcard $(PROJECT_GDS_DIR)/$*/*.gds))) \
+		-rd input_manifest=$(OUTPUT_DIR)/$*/$*_project_gds.json \
 		-rd output_json=$(OUTPUT_DIR)/$*/$*_project_size.json \
 		-rd outline_layer=$(PROJECT_OUTLINE_LAYER) \
 		-rd outline_datatype=$(PROJECT_OUTLINE_DATATYPE) \

@@ -151,8 +151,12 @@ rectangle on GDS layer `0/0` and combines them with the info.yaml pin count:
 make -f chipathon2026-system/Makefile.padframe project-def-A01
 ```
 
-By default it uses the first `gds/A01/*.gds`. Override that with
-`PROJECT_GDS=/path/to/project.gds`; the outline layer is overrideable with
+By default it reads `info/A01_lvs_config.json`, expands its `LAYOUT_FILE`, and
+uses the matching downloaded basename under `gds/A01/`; directory ordering is
+never used. The downloader writes this retained LVS-config copy. Existing
+download directories must be refreshed, or supplied with
+`PROJECT_LVS_CONFIG=/path/to/lvs_config.json`. `PROJECT_GDS=/path/to/project.gds`
+remains an explicit override. The outline layer is overrideable with
 `PROJECT_OUTLINE_LAYER` and `PROJECT_OUTLINE_DATATYPE`. One variant-specific
 padring and project DEF are written for every minimum-area fitting block type.
 

@@ -1,7 +1,12 @@
 import pytest
 
 from chipathon2026_integration.errors import ConfigError
-from chipathon2026_integration.lvs import get_layout_file, normalize_repo_path, resolve_json_variables
+from chipathon2026_integration.lvs import (
+    get_layout_file,
+    normalize_repo_path,
+    resolve_downloaded_gds,
+    resolve_json_variables,
+)
 
 
 def test_variable_resolution():
@@ -26,3 +31,17 @@ def test_layout_file_not_layout_data():
 def test_cycle_rejected():
     with pytest.raises(ConfigError, match="cyclic"):
         resolve_json_variables({"A": "$B", "B": "$A", "LAYOUT_FILE": "$A"})
+
+
+def test_downloaded_gds_comes_from_layout_file_not_directory_order(tmp_path):
+    team_dir = tmp_path / "A01"
+    team_dir.mkdir()
+    selected = team_dir / "selected.gds"
+    selected.write_bytes(b"selected")
+    (team_dir / "aaa_first.gds").write_bytes(b"wrong")
+    config = {
+        "TOP_SOURCE": "selected",
+        "GDS_DIR": "$UPRJ_ROOT/layout",
+        "LAYOUT_FILE": "$GDS_DIR/$TOP_SOURCE.gds",
+    }
+    assert resolve_downloaded_gds(config, team="A01", gds_dir=tmp_path) == selected

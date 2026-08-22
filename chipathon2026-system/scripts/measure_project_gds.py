@@ -11,7 +11,12 @@ def required_variable(name):
     return str(value)
 
 
-input_path = required_variable("input_gds")
+input_manifest = globals().get("input_manifest")
+if input_manifest is not None and str(input_manifest).strip():
+    with open(str(input_manifest), "r", encoding="utf-8") as stream:
+        input_path = str(json.load(stream)["project_gds"])
+else:
+    input_path = required_variable("input_gds")
 output_path = required_variable("output_json")
 layer_number = int(globals().get("outline_layer", 0))
 datatype_number = int(globals().get("outline_datatype", 0))

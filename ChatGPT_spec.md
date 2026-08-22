@@ -786,8 +786,12 @@ on the configured outline layer/datatype (default `0/0`). Rectangle width and
 height are converted to microns using the GDS layout DBU. Those dimensions and
 the participant pin count from info.yaml select every minimum-area fitting
 variant before its variant-specific padring and project DEF are generated.
-`PROJECT_GDS`, `PROJECT_GDS_DIR`, `PROJECT_OUTLINE_LAYER`, and
-`PROJECT_OUTLINE_DATATYPE` are Makefile-overridable.
+The GDS filename must be selected from the expanded `LAYOUT_FILE` in the
+project's retained lvs_config.json; selecting the first file in a directory is
+prohibited. The downloader stores that config as
+`<INFO_DIR>/<team-code>_lvs_config.json`. `PROJECT_GDS`, `PROJECT_LVS_CONFIG`,
+`PROJECT_GDS_DIR`, `PROJECT_OUTLINE_LAYER`, and `PROJECT_OUTLINE_DATATYPE` are
+Makefile-overridable.
 
 Mapped slots must be an ordered subsequence of the variant's authoritative pin
 order. This permits fixed VSS slots to remain owned by the integration template

@@ -111,3 +111,14 @@ def normalize_repo_path(value: str) -> str:
     if not value:
         raise ConfigError("empty repository-relative path")
     return value
+
+
+def resolve_downloaded_gds(config: dict[str, Any], *, team: str, gds_dir: Path) -> Path:
+    """Resolve LAYOUT_FILE to the downloader's local <gds-dir>/<team>/<basename>."""
+    layout_path = normalize_repo_path(get_layout_file(config))
+    candidate = gds_dir / team / Path(layout_path).name
+    if not candidate.is_file():
+        raise ConfigError(
+            f"GDS selected by LAYOUT_FILE ({layout_path}) was not found at {candidate}"
+        )
+    return candidate

@@ -101,6 +101,12 @@ def process_team(
         print(f"  lvs_config:   {lvs_path}")
 
         lvs_data = get_raw_repo_file(session, repo, lvs_path, ref)
+        lvs_file = info_dir / f"{team}_lvs_config.json"
+        if overwrite or not lvs_file.exists():
+            lvs_file.write_bytes(lvs_data)
+        else:
+            print(f"  LVS config exists: {lvs_file}")
+        print(f"  LVS config saved: {lvs_file}")
         top_layout, layout_path = parse_lvs_bytes(lvs_data)
         print(f"  TOP_LAYOUT:   {top_layout}")
         print(f"  LAYOUT_FILE:  {layout_path}")
