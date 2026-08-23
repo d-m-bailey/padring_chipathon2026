@@ -6,6 +6,7 @@ import yaml
 from chipathon2026_integration.errors import ConfigError
 from chipathon2026_integration.virtual_def import (
     BLOCK_VARIANTS,
+    _project_pin_name,
     _project_terminal_name,
     generate_project_def,
     micron_to_dbu,
@@ -100,8 +101,19 @@ def test_project_terminal_names():
     assert _project_terminal_name("input_schmitt", "RST", "PU") == "RST_PU"
     assert _project_terminal_name("bidirectional", "DATA", "Y") == "DATA_IN"
     assert _project_terminal_name("bidirectional", "DATA", "A") == "DATA_OUT"
-    assert _project_terminal_name("bidirectional", "data[7]", "Y") == "data_7_IN"
+    assert _project_terminal_name("input_cmos", "DATA[0]", "Y") == "DATA[0]"
+    assert _project_terminal_name("input_cmos", "DATA[0]", "PU") == "DATA_PU[0]"
+    assert _project_terminal_name("input_cmos", "DATA[0]", "PD") == "DATA_PD[0]"
+    assert _project_terminal_name("bidirectional", "data[7]", "Y") == "data_IN[7]"
+    assert _project_terminal_name("bidirectional", "data[7]", "A") == "data_OUT[7]"
+    assert _project_terminal_name("bidirectional", "data[3][0]", "OE") == "data_OE[3][0]"
     assert _project_terminal_name("bidirectional_24ma", "DATA", "OE") == "DATA_OE"
+
+
+@pytest.mark.parametrize("name", ["DATA[0", "DATA0]", "DATA[0]bad", "DATA[][0]", "[0]"])
+def test_malformed_bus_pin_names_are_rejected(name):
+    with pytest.raises(ConfigError, match="bus syntax"):
+        _project_pin_name(name, "PU")
 
 
 def test_project_def_uses_padring_pin_geometry_and_extends_inward(tmp_path):

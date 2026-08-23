@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+import re
 from typing import Any, Iterable
 
 import yaml
@@ -15,6 +16,7 @@ from .padring_cfg import safe_identifier
 
 
 GF180_ROUTING_LAYERS = ("Metal1", "Metal2", "Metal3", "Metal4", "Metal5")
+BUS_SUFFIX_RE = re.compile(r"(?P<suffix>(?:\[-?\d+\])+)$")
 
 
 @dataclass(frozen=True)
@@ -223,16 +225,29 @@ def _invert_direction(direction: str | None) -> str:
     return {"INPUT": "OUTPUT", "OUTPUT": "INPUT"}.get(value, value)
 
 
+def _project_pin_name(user_name: str, qualifier: str | None = None) -> str:
+    match = BUS_SUFFIX_RE.search(user_name)
+    if match is None:
+        if "[" in user_name or "]" in user_name:
+            raise ConfigError(f"malformed or non-trailing bus syntax in project pin {user_name!r}")
+        base, suffix = user_name, ""
+    else:
+        base, suffix = user_name[:match.start()], match.group("suffix")
+        if not base or "[" in base or "]" in base:
+            raise ConfigError(f"malformed or non-trailing bus syntax in project pin {user_name!r}")
+    base_name = safe_identifier(base)
+    return f"{base_name}_{qualifier}{suffix}" if qualifier else f"{base_name}{suffix}"
+
+
 def _project_terminal_name(io_type: str, user_name: str, terminal: str) -> str:
-    base_name = safe_identifier(user_name)
     if io_type in {"input_cmos", "input_schmitt"} and terminal == "Y":
-        return base_name
+        return _project_pin_name(user_name)
     if io_type in {"bidirectional", "bidirectional_24ma"}:
         if terminal == "Y":
-            return f"{base_name}_IN"
+            return _project_pin_name(user_name, "IN")
         if terminal == "A":
-            return f"{base_name}_OUT"
-    return f"{base_name}_{terminal}"
+            return _project_pin_name(user_name, "OUT")
+    return _project_pin_name(user_name, terminal)
 
 
 def _rect_list(rect: DefRect) -> list[int]:
@@ -290,11 +305,11 @@ def generate_project_def(
 
         io_type = pad.get("io_type")
         if io_type == "analog":
-            terminals = (("ASIG5V", user_name, f"{slot}_ASIG5V", True),)
+            terminals = (("ASIG5V", _project_pin_name(user_name), f"{slot}_ASIG5V", True),)
         elif io_type == "power" or cell == POWER_CELL:
-            terminals = (("DVDD", user_name, slot, True),)
+            terminals = (("DVDD", _project_pin_name(user_name), slot, True),)
         elif io_type == "ground" or cell == GROUND_CELL:
-            terminals = (("DVSS", user_name, slot, True),)
+            terminals = (("DVSS", _project_pin_name(user_name), slot, True),)
         else:
             cell_terminals = CELL_PROJECT_TERMINALS.get(cell)
             if cell_terminals is None:
@@ -316,7 +331,7 @@ def generate_project_def(
                 raise ConfigError(f"padring DEF is missing required pin geometry {source_name!r}")
             rects = _select_source_rects(source, lef_pin, metal2_only=metal2_only)
             transformed = _extend_and_translate(rects, slot=slot, origin=origin, size=size, extension=extension)
-            out_name = safe_identifier(raw_name)
+            out_name = raw_name
             if out_name in names:
                 raise ConfigError(f"duplicate generated project pin name {out_name!r}")
             names.add(out_name)

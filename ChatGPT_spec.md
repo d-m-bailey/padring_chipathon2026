@@ -496,9 +496,14 @@ Each project-facing I/O-cell terminal in the padring DEF and Verilog is named
 geometry is derived from the corresponding transformed LEF pin rectangles so
 that the same named terminals exist in the generated layout.
 
-The corresponding pin in a user project DEF is named
-`<project-pin-name>_<cell-terminal>`, for example `RST_A`. Names are sanitized
-for DEF/Verilog identifiers and collisions after sanitization are errors.
+The corresponding pin in a user project DEF is based on the participant pin
+name and I/O-cell terminal, for example `RST_A`. A scalar name may be sanitized
+as required for a DEF/Verilog identifier, and collisions after sanitization are
+errors. A valid bus suffix must not be flattened or replaced with underscores.
+Terminal qualifiers are inserted before the bus suffix. For example, the
+control terminals for participant pin `DATA[0]` are `DATA_PU[0]`, `DATA_PD[0]`,
+and so on, not `DATA_0_PU` or `DATA_0__PU`. The generated DEF declares
+`BUSBITCHARS "[]"` and retains the bracketed form.
 
 # **19\. Unused project slots**
 
@@ -681,12 +686,21 @@ DIEAREA ( 0 0 ) ( <block-width-dbu> <block-height-dbu> ) ;
 ```
 
 For every mapped user pad, the generator emits every project-facing I/O-cell
-terminal. Input-pad `Y` terminals use the bare user pad name, such as `RST`,
-rather than `RST_Y`. For bidirectional pads, `Y` uses `<user-pad-name>_IN` and
-`A` uses `<user-pad-name>_OUT`. Other digital terminals retain
-`<user-pad-name>_<cell-terminal>`, such as `RST_PU` or `DATA_OE`. Directions
-are inverted relative to the padring-facing terminal, while DEF `USE` and
-other applicable pin properties are preserved.
+terminal. Input-pad `Y` terminals use the bare user pad name, such as `RST` or
+`DATA[0]`, rather than `RST_Y` or `DATA_Y[0]`. For bidirectional pads, `Y` uses
+`<user-pad-name>_IN` and `A` uses `<user-pad-name>_OUT`. For a bus pin, these
+qualifiers precede the index: `DATA_IN[0]` and `DATA_OUT[0]`. Other digital
+terminals retain `<user-pad-name>_<cell-terminal>`, such as `RST_PU`,
+`DATA_PU[0]`, `DATA_PD[0]`, or `DATA_OE[0]`. Directions are inverted relative
+to the padring-facing terminal, while DEF `USE` and other applicable pin
+properties are preserved.
+
+More generally, a participant name is separated into its scalar base and its
+trailing bracketed bus suffix. The terminal qualifier is appended to the base,
+then the unchanged suffix is restored. This applies to every trailing index in
+a multidimensional name: `DATA[3][0]` with terminal `PU` becomes
+`DATA_PU[3][0]`. Malformed or non-trailing bracket syntax is rejected rather
+than silently flattened.
 
 Pin rectangles come from the actual named PINS geometry in the generated
 padring DEF. They must not be positioned again from I/O-cell placement or LEF

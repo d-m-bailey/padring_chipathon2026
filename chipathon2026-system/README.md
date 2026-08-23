@@ -143,6 +143,9 @@ and is translated to a local DIEAREA beginning at `(0,0)`.
 Input-pad `Y` terminals use the bare user pad name. Bidirectional `Y` and `A`
 terminals use `<pad>_IN` and `<pad>_OUT`, respectively; other terminal names
 retain their cell-terminal suffix.
+For bus pins, the qualifier is inserted before the unchanged bracket suffix:
+`DATA[0]` produces `DATA_PU[0]`, `DATA_PD[0]`, `DATA_IN[0]`, and
+`DATA_OUT[0]` as applicable. Malformed bracket syntax is rejected.
 
 The Makefile derives those dimensions automatically from the single top-cell
 rectangle on GDS layer `0/0` and combines them with the info.yaml pin count:
