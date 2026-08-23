@@ -232,6 +232,11 @@ def main(argv: list[str] | None = None) -> int:
                         "provide --project-size-json or both --project-width and --project-height"
                     )
                 project_width, project_height = args.project_width, args.project_height
+                size_data = {}
+            layout_texts = [
+                entry["text"] for entry in size_data.get("top_cell_text", [])
+                if isinstance(entry, dict) and isinstance(entry.get("text"), str)
+            ]
             micron_to_dbu(project_width, design.units, "project width")
             micron_to_dbu(project_height, design.units, "project height")
             fitting = select_block_variants(
@@ -266,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
                     variant_code=variant.code,
                     design_name=f"{base_name}_{variant.code}",
                     routing_layers=layers,
+                    layout_texts=layout_texts,
                 )
                 output.write_text(text, encoding="utf-8")
                 interface_map.write_text(yaml.safe_dump(metadata, sort_keys=False), encoding="utf-8")
@@ -282,6 +288,10 @@ def main(argv: list[str] | None = None) -> int:
                 project_height = size_data["height_microns"]
             except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
                 raise IntegrationError(f"cannot read project size JSON {args.project_size_json}: {exc}") from exc
+            layout_texts = [
+                entry["text"] for entry in size_data.get("top_cell_text", [])
+                if isinstance(entry, dict) and isinstance(entry.get("text"), str)
+            ]
             variants = select_block_variants(
                 project_width=project_width,
                 project_height=project_height,
@@ -330,6 +340,7 @@ def main(argv: list[str] | None = None) -> int:
                     variant_code=variant.code,
                     design_name=f"{args.team_code}_{variant.code}",
                     routing_layers=layers,
+                    layout_texts=layout_texts,
                 )
                 interface["project_gds_size"] = size_data
                 interface["participant_pin_count"] = len(pins)

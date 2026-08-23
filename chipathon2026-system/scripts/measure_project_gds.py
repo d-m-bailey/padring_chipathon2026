@@ -63,7 +63,17 @@ result = {
     "rectangle_dbu": [outline.left, outline.bottom, outline.right, outline.top],
     "width_microns": format(outline.width() * layout.dbu, ".12g"),
     "height_microns": format(outline.height() * layout.dbu, ".12g"),
+    "top_cell_text": [],
 }
+for layer_index in layout.layer_indexes():
+    layer_info = layout.get_info(layer_index)
+    for shape in top.shapes(layer_index).each():
+        if shape.is_text():
+            result["top_cell_text"].append({
+                "text": shape.text.string,
+                "layer": layer_info.layer,
+                "datatype": layer_info.datatype,
+            })
 with open(output_path, "w", encoding="utf-8") as stream:
     json.dump(result, stream, indent=2)
     stream.write("\n")

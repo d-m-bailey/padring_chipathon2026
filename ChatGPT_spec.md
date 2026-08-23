@@ -702,6 +702,43 @@ a multidimensional name: `DATA[3][0]` with terminal `PU` becomes
 `DATA_PU[3][0]`. Malformed or non-trailing bracket syntax is rejected rather
 than silently flattened.
 
+## **24.0.1 Project-layout text case resolution**
+
+The default spelling of a generated project-interface signal uses the
+participant pin-name case from info.yaml and the authoritative I/O-cell
+terminal case. For example, pad `DATA` with terminals `OE` and `IE` defaults to
+`DATA_OE` and `DATA_IE`. The same rule applies before a bus suffix, producing
+names such as `DATA_OE[0]`.
+
+Before finalizing project-interface names, the generator examines text objects
+placed directly in the top cell of the project GDS selected by `LAYOUT_FILE`.
+Text in referenced lower-level cells is not a top-level signal declaration and
+is ignored. Direct top-cell text may be considered on any GDS layer because a
+candidate is relevant only when its complete logical name matches an expected
+generated signal case-insensitively.
+
+For each expected signal:
+
+* if no top-cell text matches case-insensitively, use the default spelling;
+* if one exact spelling matches, use that complete layout spelling in the
+  generated project DEF and every corresponding generated Verilog interface;
+* repeated text objects with the same exact spelling are permitted;
+* two or more distinct spellings that compare equal case-insensitively are a
+  conflict and generation must fail.
+
+Thus, top-cell text `DATA_oe` overrides default `DATA_OE`, and `DATA_ie`
+overrides `DATA_IE`. The generated DEF and corresponding Verilog pins must then
+use `DATA_oe` and `DATA_ie` exactly. If both `DATA_OE` and `DATA_oe` occur in
+the top cell, generation fails rather than choosing one. Bus spelling is
+handled identically: layout text `DATA_oe[0]` overrides default `DATA_OE[0]`
+without flattening or moving the index.
+
+Case-insensitive collisions between two different expected generated signals
+are also errors, even if the layout contains no matching text. Interface
+mapping metadata records both the default generated name and the final
+layout-resolved spelling so that DEF, Verilog, and layout-name audits use the
+same decision.
+
 Pin rectangles come from the actual named PINS geometry in the generated
 padring DEF. They must not be positioned again from I/O-cell placement or LEF
 macro dimensions. LEF terminal definitions identify which padring geometry is

@@ -250,6 +250,35 @@ def _project_terminal_name(io_type: str, user_name: str, terminal: str) -> str:
     return _project_pin_name(user_name, terminal)
 
 
+def resolve_layout_text_case(default_names: Iterable[str], layout_texts: Iterable[str]) -> dict[str, str]:
+    """Resolve generated interface names against direct top-cell GDS text."""
+    defaults = tuple(default_names)
+    default_groups: dict[str, list[str]] = {}
+    for name in defaults:
+        default_groups.setdefault(name.casefold(), []).append(name)
+    collisions = [names for names in default_groups.values() if len(set(names)) > 1]
+    if collisions:
+        rendered = ", ".join("/".join(sorted(set(names))) for names in collisions)
+        raise ConfigError(f"case-insensitive collision between generated project pins: {rendered}")
+
+    text_groups: dict[str, set[str]] = {}
+    for value in layout_texts:
+        if not isinstance(value, str):
+            raise ConfigError("project GDS top-cell text values must be strings")
+        text_groups.setdefault(value.casefold(), set()).add(value)
+
+    resolved: dict[str, str] = {}
+    for name in defaults:
+        spellings = text_groups.get(name.casefold(), set())
+        if len(spellings) > 1:
+            raise ConfigError(
+                f"conflicting top-cell layout text spellings for project pin {name!r}: "
+                + ", ".join(repr(value) for value in sorted(spellings))
+            )
+        resolved[name] = next(iter(spellings)) if spellings else name
+    return resolved
+
+
 def _rect_list(rect: DefRect) -> list[int]:
     return [rect.x1, rect.y1, rect.x2, rect.y2]
 
@@ -258,6 +287,7 @@ def generate_project_def(
     *, mapping_path: Path, padring_def: Path, lef_paths: list[Path],
     variant_code: str, design_name: str = "chipathon_project_interface",
     routing_layers: tuple[str, ...] = GF180_ROUTING_LAYERS,
+    layout_texts: Iterable[str] = (),
 ) -> tuple[str, dict[str, Any]]:
     try:
         variant = BLOCK_VARIANTS[variant_code.upper()]
@@ -336,11 +366,18 @@ def generate_project_def(
                 raise ConfigError(f"duplicate generated project pin name {out_name!r}")
             names.add(out_name)
             pin_defs.append({
-                "name": out_name, "user_pin_name": user_name, "terminal": terminal,
+                "name": out_name, "default_name": out_name,
+                "user_pin_name": user_name, "terminal": terminal,
                 "slot": slot, "instance": instance, "cell": cell,
                 "direction": _invert_direction(lef_pin.direction or source.direction),
                 "use": lef_pin.use or source.use, "rects": transformed,
             })
+
+    resolved_names = resolve_layout_text_case(
+        (pin["default_name"] for pin in pin_defs), layout_texts
+    )
+    for pin in pin_defs:
+        pin["name"] = resolved_names[pin["default_name"]]
 
     lines = [
         "VERSION 5.8 ;", 'DIVIDERCHAR "/" ;', 'BUSBITCHARS "[]" ;',
@@ -381,7 +418,9 @@ def generate_project_def(
         "routing_blockage_layers": list(routing_layers),
         "pins": [
             {
-                "user_pin_name": pin["user_pin_name"], "project_pin": pin["name"],
+                "user_pin_name": pin["user_pin_name"],
+                "default_project_pin": pin["default_name"],
+                "project_pin": pin["name"],
                 "cell_terminal": pin["terminal"], "padring_instance": pin["instance"],
                 "physical_pad_slot": pin["slot"], "cell": pin["cell"],
                 "direction": pin["direction"], "use": pin["use"],

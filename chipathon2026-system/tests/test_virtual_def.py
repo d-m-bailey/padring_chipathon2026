@@ -10,6 +10,7 @@ from chipathon2026_integration.virtual_def import (
     _project_terminal_name,
     generate_project_def,
     micron_to_dbu,
+    resolve_layout_text_case,
     select_block_variants,
 )
 
@@ -110,6 +111,27 @@ def test_project_terminal_names():
     assert _project_terminal_name("bidirectional_24ma", "DATA", "OE") == "DATA_OE"
 
 
+def test_layout_text_case_resolution_uses_exact_top_cell_spelling():
+    assert resolve_layout_text_case(
+        ["DATA_OE", "DATA_IE", "DATA_PD[0]"],
+        ["DATA_oe", "DATA_oe", "DATA_ie", "DATA_pd[0]", "unrelated"],
+    ) == {
+        "DATA_OE": "DATA_oe",
+        "DATA_IE": "DATA_ie",
+        "DATA_PD[0]": "DATA_pd[0]",
+    }
+
+
+def test_layout_text_case_resolution_rejects_conflicting_layout_case():
+    with pytest.raises(ConfigError, match="conflicting top-cell layout text"):
+        resolve_layout_text_case(["DATA_OE"], ["DATA_OE", "DATA_oe"])
+
+
+def test_layout_text_case_resolution_rejects_expected_name_collision():
+    with pytest.raises(ConfigError, match="case-insensitive collision"):
+        resolve_layout_text_case(["DATA_OE", "data_oe"], [])
+
+
 @pytest.mark.parametrize("name", ["DATA[0", "DATA0]", "DATA[0]bad", "DATA[][0]", "[0]"])
 def test_malformed_bus_pin_names_are_rejected(name):
     with pytest.raises(ConfigError, match="bus syntax"):
@@ -130,6 +152,18 @@ def test_project_def_uses_padring_pin_geometry_and_extends_inward(tmp_path):
     rectangle = metadata["pins"][0]["rectangles"][0]
     assert rectangle["top_level"] == [349500, 2040000, 350000, 2040500]
     assert rectangle["translated_user"] == [0, 5000, 1000, 5500]
+
+
+def test_project_def_and_metadata_use_layout_text_case(tmp_path):
+    mp, dp, lp = setup_files(tmp_path)
+    text, metadata = generate_project_def(
+        mapping_path=mp, padring_def=dp, lef_paths=[lp], variant_code="D",
+        layout_texts=["reset_n_pu"],
+    )
+    assert "- reset_n_pu + NET reset_n_pu" in text
+    pu = next(pin for pin in metadata["pins"] if pin["cell_terminal"] == "PU")
+    assert pu["default_project_pin"] == "reset_n_PU"
+    assert pu["project_pin"] == "reset_n_pu"
 
 
 def test_out_of_bounds_geometry_is_rejected(tmp_path):

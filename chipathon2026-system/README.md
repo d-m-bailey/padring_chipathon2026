@@ -143,6 +143,11 @@ and is translated to a local DIEAREA beginning at `(0,0)`.
 Input-pad `Y` terminals use the bare user pad name. Bidirectional `Y` and `A`
 terminals use `<pad>_IN` and `<pad>_OUT`, respectively; other terminal names
 retain their cell-terminal suffix.
+Control-terminal names default to the I/O-cell terminal case, such as
+`DATA_OE`. If direct text in the selected project GDS top cell matches the
+complete signal name case-insensitively, the project DEF uses that exact text
+spelling instead (for example, `DATA_oe`). Conflicting spellings such as both
+`DATA_OE` and `DATA_oe` are rejected. Interface metadata records both names.
 For bus pins, the qualifier is inserted before the unchanged bracket suffix:
 `DATA[0]` produces `DATA_PU[0]`, `DATA_PD[0]`, `DATA_IN[0]`, and
 `DATA_OUT[0]` as applicable. Malformed bracket syntax is rejected.
