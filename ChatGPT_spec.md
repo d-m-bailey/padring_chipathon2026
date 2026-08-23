@@ -259,55 +259,46 @@ Physical slot names should remain constant even if the cell occupying the slot c
 
 For example, W13 always means the same physical pad location.
 
-# **11\. Reserved middle power/ground pads**
+# **11\. Dynamic power/ground groups**
 
-The middle two pads on the left and right edges are reserved for power and ground.
+E11, E12, W11, and W12 are ordinary project pad slots. They have no default or
+fixed ground-pad assignment, are not owned by the integration template, and
+may receive any participant pad type permitted at another ordinary slot. No
+invariant break is attached to any of these four locations.
 
-With 22 pads per side, these are positions 11 and 12 on each vertical side.
+Every allocated project I/O sequence is enclosed by breaks: one break occurs
+immediately before its first I/O cell and another immediately after its last
+I/O cell. Within that sequence, pads are scanned in physical allocation order
+while maintaining a power count and a ground count for the current group. A
+break is inserted immediately before a power pad if the group already contains
+one power pad, or immediately before a ground pad if the group already contains
+one ground pad. Inserting any break resets both counts to zero before processing
+the next pad.
 
-W11  
-W12  
-E11  
-E12
+Consequently every group delimited by breaks must contain exactly one power pad
+and exactly one ground pad. Signal and analog I/O cells may occur anywhere
+between them. For example:
 
-These are not general project signal pad slots.
+```text
+BREAK, ground, ..., power, ..., BREAK, power, ..., ground, ..., BREAK
+```
 
-All four reserved cells are VSS pads:
-
-* W11 \= VSS
-* W12 \= VSS
-* E11 \= VSS
-* E12 \= VSS
-
-These cells are owned by the integration template and must not be replaced when translating user pins.
-
-The fixed middle ground regions use gf180mcu\_fd\_io\_\_brk5 cells at
-these two boundaries:
-
-* between W11 and W12;
-* between E11 and E12.
-
-These two invariant break cells belong in the physical padring template because
-their positions do not depend on participant data.
-
-Each electrically continuous project power region may contain at most one
-project power pad and one project ground pad. A second power pad or a second
-ground pad starts a new region and requires a break immediately before that
-pad. This groups an ordered power/ground sequence into pairs: for example,
-power, ground, power, ground produces a break before the second power pad.
-Every project also ends with a break. DVDD pads inherently divide the VDD/DVDD
-rails into distinct electrical segments.
+Generation must fail if the first/last boundaries or the repeated-supply rule
+would leave a completed group without exactly one power and one ground pad.
+DVDD pads inherently divide the VDD/DVDD rails into distinct electrical
+segments.
 
 Additional gf180mcu\_fd\_io\_\_brk5 cells are generated dynamically:
 
+* immediately before the first I/O pad allocated to each project;
 * immediately after the final I/O pad allocated to each project;
 * immediately before a power pad when the current region already contains a
   project power pad;
 * immediately before a ground pad when the current region already contains a
   project ground pad.
 
-Dynamic break placement belongs in the template-transformation logic because
-project length and participant power-pad count come from info.yaml. A break cell
+All break placement belongs in the template-transformation logic because
+project extent and participant power/ground-pad order come from info.yaml. A break cell
 is auxiliary physical geometry: it is not one of the 88 immutable I/O slots, it
 does not consume a participant pin, and it must not appear in the pad-center CSV.
 
@@ -358,21 +349,20 @@ Current planned block configurations are:
 | D | 1/16 die | 10 | 4 |
 | E | 1/16 die | 6 | 8 |
 
-The distinction between physical pad/interface sites and available user signal pins must be maintained.
-
-For example, an A block can have 22 physical positions associated with it while only 21 are available as ordinary user I/O if one position is dedicated to ground or power.
+Every listed physical pad/interface site is available for participant mapping,
+including power and ground pads declared by the participant. There are no
+template-reserved VSS sites to subtract from a block's pin capacity.
 
 The exact allocation for each block type should be encoded explicitly rather than inferred mathematically.
 
 # **14\. Canonical A-block pin sequence**
 
-The definitive A variant has 22 physical interface positions. W12 is a fixed
-VSS position owned by the integration template, leaving these 21 ordered
-participant-configurable positions:
+The definitive A variant has these 22 ordered participant-configurable
+positions:
 
 ```text
 A_SLOTS = [
-    "W13", "W14", "W15", "W16", "W17",
+    "W12", "W13", "W14", "W15", "W16", "W17",
     "W18", "W19", "W20", "W21", "W22",
     "N01", "N02", "N03", "N04", "N05", "N06",
     "N07", "N08", "N09", "N10", "N11",
@@ -381,8 +371,8 @@ A_SLOTS = [
 
 The exact edge numbering direction is fixed by the production 88-pad template.
 The corresponding configurable lists for every other definitive variant are
-derived from section 24.1 by preserving its order and removing its fixed VSS
-positions. These ordered lists are authoritative for padring generation.
+the complete ordered slot lists in section 24.1. These lists are authoritative
+for padring generation; no fixed supply positions are removed from them.
 
 # **15\. YosysHQ padring configuration**
 
@@ -526,14 +516,14 @@ They are physical placeholders only.
 
 # **20\. Power and ground cells are not unused placeholders**
 
-Reserved VDD/VSS positions must remain proper power cells such as:
+Participant pads declared as VDD/VSS must use proper power cells such as:
 
 gf180mcu\_fd\_io\_\_dvdd  
 gf180mcu\_fd\_io\_\_dvss
 
-They must not be replaced with analog placeholders merely because they are absent from the user's ordinary signal list.
-
-The project-block template determines which physical locations are power and ground.
+They must not be replaced with analog placeholders. Power and ground locations
+come exclusively from the participant pad mapping; the project-block template
+does not preassign them.
 
 # **21\. Padring LEF files**
 
@@ -795,20 +785,20 @@ the authoritative usable-area metric for configuration selection; in
 particular, ACE2 removes two 1/16 blocks and their spacing from the enclosing
 square.
 
-| Code | Pin order | Origin | Pin count | X | Y | Area | VSS fixed | Block |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
-| A | W12-W22, N01-N11 | 350, 1475 | 22 | 1110 | 1110 | 1,232,100 | W12 | — |
-| BV | W12-W22, N01-N05 | 350, 1475 | 16 | 550 | 1110 | 610,500 | W12 | — |
-| BH | W18-W22, N01-N11 | 350, 2035 | 16 | 1110 | 550 | 610,500 | — | — |
-| CH | W12-W17 | 350, 1475 | 6 | 1110 | 550 | 610,500 | W12 | — |
-| CV | N06-N11 | 910, 1475 | 6 | 550 | 1110 | 610,500 | — | — |
-| D | W18-W22, N01-N05 | 350, 2035 | 10 | 550 | 550 | 302,500 | — | — |
-| EV | N06-N11 | 910, 2035 | 6 | 550 | 550 | 302,500 | — | — |
-| EH | W12-W17 | 350, 1475 | 6 | 550 | 550 | 302,500 | W12 | — |
-| ACV | W12-W22, N01-N16 | 350, 1475 | 27 | 1675 | 1110 | 1,859,250 | W12 | — |
-| ACH | W07-W22, N01-N11 | 350, 910 | 27 | 1110 | 1675 | 1,859,250 | W11, W12 | — |
-| ACE | W07-W22, N01-N16 | 350, 910 | 32 | 1675 | 1675 | 2,805,625 | W11, W12 | — |
-| ACE2 | W07-W22, N01-N16, E16-E01, S22-S07 | 350, 350 | 64 | 2235 | 2235 | 5,308,750 | W11, W12, E11, E12 | (0,0)-(560,560) and (1675,1675)-(2235,2235) |
+| Code | Pin order | Origin | Pin count | X | Y | Area | Block |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| A | W12-W22, N01-N11 | 350, 1475 | 22 | 1110 | 1110 | 1,232,100 | — |
+| BV | W12-W22, N01-N05 | 350, 1475 | 16 | 550 | 1110 | 610,500 | — |
+| BH | W18-W22, N01-N11 | 350, 2035 | 16 | 1110 | 550 | 610,500 | — |
+| CH | W12-W17 | 350, 1475 | 6 | 1110 | 550 | 610,500 | — |
+| CV | N06-N11 | 910, 1475 | 6 | 550 | 1110 | 610,500 | — |
+| D | W18-W22, N01-N05 | 350, 2035 | 10 | 550 | 550 | 302,500 | — |
+| EV | N06-N11 | 910, 2035 | 6 | 550 | 550 | 302,500 | — |
+| EH | W12-W17 | 350, 1475 | 6 | 550 | 550 | 302,500 | — |
+| ACV | W12-W22, N01-N16 | 350, 1475 | 27 | 1675 | 1110 | 1,859,250 | — |
+| ACH | W07-W22, N01-N11 | 350, 910 | 27 | 1110 | 1675 | 1,859,250 | — |
+| ACE | W07-W22, N01-N16 | 350, 910 | 32 | 1675 | 1675 | 2,805,625 | — |
+| ACE2 | W07-W22, N01-N16, E16-E01, S22-S07 | 350, 350 | 64 | 2235 | 2235 | 5,308,750 | (0,0)-(560,560) and (1675,1675)-(2235,2235) |
 
 For each rectangle in the `Block` column, the generated user DEF emits both a
 placement blockage and routing blockages covering every routing layer. These
@@ -845,8 +835,8 @@ prohibited. The downloader stores that config as
 Makefile-overridable.
 
 Mapped slots must be an ordered subsequence of the variant's authoritative pin
-order. This permits fixed VSS slots to remain owned by the integration template
-without forcing them to appear as participant pad mappings.
+order. All listed slots, including E11, E12, W11, and W12, are ordinary
+participant-mappable positions and count toward the variant's full capacity.
 
 # **25\. Transforming projects to other quadrants**
 
@@ -937,15 +927,17 @@ The converter should reject:
 * collisions after pin-name sanitization;  
 * missing physical slots in the padring template;  
 * unexpected legacy PAD instances in a production template;
-* missing or misplaced fixed brk5 cells around W11/W12 and E11/E12;
+* a missing break before the first or after the last allocated project I/O cell;
+* a power/ground group containing anything other than exactly one power and one ground pad;
+* a missing break before a second power or second ground pad in a group;
 * missing required cell mappings.
 
 It should also verify that every physical project slot is accounted for as one of:
 
-user I/O  
-reserved power  
-reserved ground  
-unused analog placeholder
+* user I/O;
+* participant power;
+* participant ground;
+* unused analog placeholder.
 
 # **29\. Important implementation principle**
 
@@ -1070,16 +1062,15 @@ suffix. The gap before the first pad on a side is index 00; the gap after pad
 fillers use `BRK_<side><gap>_<n>`, for example `FILL_E00_1` and `BRK_E10_1`.
 The same instance names appear in DEF and structural Verilog.
 
-E11 and W12 remain shorted as the global ground network, but individual cell
-connections retain geographic ownership for LVS debugging. All west-edge
-cells, N01-N11, and S01-S11 connect their `VSS` and `DVSS` terminals to W12.
-All east-edge cells, N12-N22, and S12-S22 connect them to E11. Filler and
-corner cells follow the region of their nearest canonical pad. `VDD` and
-`DVDD` are likewise connected to the same net
-within an individual continuity segment. Every DVDD pad inherently breaks the
+There are no default global-ground pads at E11, E12, W11, or W12. Each
+break-delimited group derives its power and ground ownership from the single
+participant power pad and single participant ground pad assigned within that
+group. I/O and filler cells in the group connect their supply terminals to
+those canonical power and ground pad nets. Every DVDD pad inherently breaks the
 VDD/DVDD rails, so two DVDD pads cannot electrically belong to the same
 segment. `BREAK ;` supplies the separately required `brk5` physical isolation;
-it is not the mechanism that separates DVDD-pad power domains. A powered
+it also resets the generator's power and ground counters, but is not the
+mechanism that separates DVDD-pad power domains. A powered
 segment uses the bare canonical name of its DVDD pad as its supply port and
 net. Any I/O or filler region that has no DVDD source uses an explicitly
 declared, unique floating net named `FLOAT_VDD_<n>`. Floating regions must not

@@ -200,15 +200,13 @@ def write_canonical_verilog(
     )
     if not ground_slots:
         raise ConfigError("padring contains no canonical DVSS pad")
+    # The VSS/DVSS rail is continuous through brk5.  Use an actual mapped
+    # participant ground pad as the common rail name; no physical slot has a
+    # template-defined ground role.
     ground_net = ground_slots[0]
 
-    def ground_net_for_slot(slot: str) -> str:
-        if slot.startswith("W"):
-            return "W12"
-        if slot.startswith("E"):
-            return "E11"
-        number = int(slot[1:])
-        return "W12" if number <= 11 else "E11"
+    def ground_net_for_slot(_slot: str) -> str:
+        return ground_net
 
     physical_ports = list(ALL_PHYSICAL_SLOTS)
     port_names = physical_ports + [pin["name"] for pin in pins]

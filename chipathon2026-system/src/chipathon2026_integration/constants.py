@@ -22,9 +22,6 @@ ANALOG_PLACEHOLDER_CELL = "gf180mcu_fd_io__asig_5p0"
 POWER_CELL = "gf180mcu_fd_io__dvdd"
 GROUND_CELL = "gf180mcu_fd_io__dvss"
 BREAK_CELL = "gf180mcu_fd_io__brk5"
-REQUIRED_TEMPLATE_BREAKS = {
-    "BRK_W11_W12", "BRK_E11_E12",
-}
 
 # The explicit list in section 14 is authoritative.  The prose sentence that
 # still says L13 is intentionally not used.
@@ -39,21 +36,21 @@ def _slot_ranges(*ranges: str) -> tuple[str, ...]:
 
 
 # Participant-configurable positions from the definitive project-block table.
-# Fixed VSS positions are deliberately omitted because the template owns them.
-A_SLOTS = _slot_ranges("W13-W22", "N01-N11")
+# There are no template-owned fixed supply positions.
+A_SLOTS = _slot_ranges("W12-W22", "N01-N11")
 BLOCK_SLOTS = {
     "A": A_SLOTS,
-    "BV": _slot_ranges("W13-W22", "N01-N05"),
+    "BV": _slot_ranges("W12-W22", "N01-N05"),
     "BH": _slot_ranges("W18-W22", "N01-N11"),
-    "CH": _slot_ranges("W13-W17"),
+    "CH": _slot_ranges("W12-W17"),
     "CV": _slot_ranges("N06-N11"),
     "D": _slot_ranges("W18-W22", "N01-N05"),
     "EV": _slot_ranges("N06-N11"),
-    "EH": _slot_ranges("W13-W17"),
-    "ACV": _slot_ranges("W13-W22", "N01-N16"),
-    "ACH": _slot_ranges("W07-W10", "W13-W22", "N01-N11"),
-    "ACE": _slot_ranges("W07-W10", "W13-W22", "N01-N16"),
-    "ACE2": _slot_ranges("W07-W10", "W13-W22", "N01-N16", "E16-E13", "E10-E01", "S22-S07"),
+    "EH": _slot_ranges("W12-W17"),
+    "ACV": _slot_ranges("W12-W22", "N01-N16"),
+    "ACH": _slot_ranges("W07-W22", "N01-N11"),
+    "ACE": _slot_ranges("W07-W22", "N01-N16"),
+    "ACE2": _slot_ranges("W07-W22", "N01-N16", "E16-E01", "S22-S07"),
 }
 
 UNFINALIZED_BLOCKS: set[str] = set()
@@ -63,8 +60,6 @@ ALL_PHYSICAL_SLOTS = tuple(
     for side in ("N", "E", "S", "W")
     for number in range(1, 23)
 )
-
-RESERVED_VERTICAL_POWER_GROUND_SLOTS = ("W11", "W12", "E11", "E12")
 
 REQUIRED_PADRING_LEF_CELLS = (
     "gf180mcu_fd_io__cor",

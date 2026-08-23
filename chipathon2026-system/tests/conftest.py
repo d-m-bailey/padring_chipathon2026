@@ -2,9 +2,6 @@ from pathlib import Path
 
 import pytest
 
-from chipathon2026_integration.constants import GROUND_CELL, POWER_CELL
-
-
 @pytest.fixture
 def full_template(tmp_path: Path) -> Path:
     lines = [
@@ -23,16 +20,9 @@ def full_template(tmp_path: Path) -> Path:
         for n in range(1, 23):
             slot = f"{side}{n:02d}"
             cell = "gf180mcu_fd_io__asig_5p0"
-            if slot in {"W11", "W12", "E11", "E12"}:
-                cell = GROUND_CELL
             flip = " FLIP" if slot == "W14" else ""
             comment = " # keep me" if slot == "W15" else ""
             lines.append(f"PAD {slot} {side}{flip} {cell} ;{comment}")
-            break_name = {
-                "W11": "BRK_W11_W12", "E11": "BRK_E11_E12",
-            }.get(slot)
-            if break_name:
-                lines.append("BREAK ;")
     path = tmp_path / "physical.cfg"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
@@ -46,5 +36,7 @@ def minimal_info():
             {"name": "reset_n", "io_type": "input_schmitt"},
             {"name": "data[7]", "io_type": "bidirectional"},
             {"name": "ain", "io_type": "analog", "secondary_esd": True},
+            {"name": "vdd", "io_type": "power"},
+            {"name": "vss", "io_type": "ground"},
         ],
     }

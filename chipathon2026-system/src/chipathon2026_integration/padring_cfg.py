@@ -11,11 +11,7 @@ from .constants import (
     ALL_PHYSICAL_SLOTS,
     ANALOG_PLACEHOLDER_CELL,
     BLOCK_SLOTS,
-    GROUND_CELL,
     IO_CELLS,
-    POWER_CELL,
-    REQUIRED_TEMPLATE_BREAKS,
-    RESERVED_VERTICAL_POWER_GROUND_SLOTS,
     SPEC_BLOB_SHA,
     UNFINALIZED_BLOCKS,
 )
@@ -79,22 +75,10 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
     extra = sorted(immutable - set(ALL_PHYSICAL_SLOTS))
     legacy = sorted(entry.instance for entry in entries if entry.instance not in immutable)
     break_issues: list[str] = []
-    found_breaks: list[str] = []
-    expected_boundaries = {
-        "BRK_W11_W12": ("W11", "W12"), "BRK_E11_E12": ("E11", "E12"),
-    }
-    for name, (before, after) in expected_boundaries.items():
-        if before in by_name and after in by_name:
-            between = lines[by_name[before].line_index + 1:by_name[after].line_index]
-            count = sum(line.strip() == "BREAK ;" for line in between)
-            if count == 1:
-                found_breaks.append(name)
-            else:
-                break_issues.append(f"{name} requires exactly one BREAK ; directive")
     total_breaks = sum(line.strip() == "BREAK ;" for line in lines)
-    if total_breaks != len(REQUIRED_TEMPLATE_BREAKS):
+    if total_breaks:
         break_issues.append(
-            f"template contains {total_breaks} BREAK directives; expected {len(REQUIRED_TEMPLATE_BREAKS)}"
+            f"template contains {total_breaks} fixed BREAK directives; expected none"
         )
     if not any(line.strip().startswith("BREAKFILLER ") for line in lines):
         break_issues.append("template is missing BREAKFILLER")
@@ -102,26 +86,17 @@ def audit_physical_template(path: Path) -> dict[str, Any]:
         slot for slot in immutable if by_name[slot].location != slot[0]
     ]
 
-    reserved_issues: list[str] = []
-    for side_slots in (("W11", "W12"), ("E11", "E12")):
-        if all(slot in by_name for slot in side_slots):
-            cells = [by_name[slot].cell for slot in side_slots]
-            if cells != [GROUND_CELL, GROUND_CELL]:
-                reserved_issues.append(
-                    f"{side_slots[0]}/{side_slots[1]} must both use {GROUND_CELL}; found {cells}"
-                )
-
     return {
         "pad_count": len(entries),
         "immutable_slot_count": len(immutable),
         "missing_physical_slots": missing,
         "extra_physical_slots": extra,
         "side_mismatches": side_mismatches,
-        "reserved_power_ground_issues": reserved_issues,
+        "reserved_power_ground_issues": [],
         "legacy_instance_names": legacy,
-        "break_boundaries": sorted(found_breaks),
+        "break_boundaries": [],
         "break_issues": break_issues,
-        "valid_for_production": not missing and not extra and not legacy and not break_issues and not side_mismatches and not reserved_issues,
+        "valid_for_production": not missing and not extra and not legacy and not break_issues and not side_mismatches,
     }
 
 
@@ -158,6 +133,8 @@ def generate_padring_config(
     require_complete_template: bool = True,
 ) -> tuple[str, dict[str, Any]]:
     pins = validate_pins(info)
+    if not pins:
+        raise ConfigError("project must define at least one I/O pad")
     if team_code is not None:
         normalized_team_code = safe_identifier(team_code.strip())
         if not team_code.strip() or normalized_team_code != team_code.strip():
@@ -192,7 +169,7 @@ def generate_padring_config(
             if audit["legacy_instance_names"]:
                 details.append(f"unexpected PAD instances: {audit['legacy_instance_names']}")
             if audit["break_issues"]:
-                details.append(f"missing or unexpected fixed breaks: {audit['break_issues']}")
+                details.append(f"unexpected template breaks: {audit['break_issues']}")
             if audit["reserved_power_ground_issues"]:
                 details.extend(audit["reserved_power_ground_issues"])
             raise ConfigError(
@@ -256,6 +233,13 @@ def generate_padring_config(
 
     break_entries: list[dict[str, str]] = []
     insertions: list[tuple[int, list[str]]] = []
+    first_slot = by_name[slots[0]]
+    insertions.append((first_slot.line_index, ["BREAK ;"]))
+    break_entries.append({
+        "instance": f"BRK_BEFORE_{block.upper()}",
+        "reason": "project_boundary",
+        "before_slot": first_slot.instance,
+    })
     region_has_power = False
     region_has_ground = False
     for pin_index, pin in enumerate(pins):
@@ -266,6 +250,11 @@ def generate_padring_config(
             or (io_type == "ground" and region_has_ground)
         )
         if starts_new_region:
+            if not region_has_power or not region_has_ground:
+                missing = "power" if not region_has_power else "ground"
+                raise ConfigError(
+                    f"power/ground group ending before {slot.instance} is missing {missing} pad"
+                )
             name = f"BRK_BEFORE_{slot.instance}"
             insertions.append((slot.line_index, ["BREAK ;"]))
             break_entries.append({
@@ -280,16 +269,15 @@ def generate_padring_config(
         elif io_type == "ground":
             region_has_ground = True
 
+    if not region_has_power or not region_has_ground:
+        missing = "power" if not region_has_power else "ground"
+        raise ConfigError(f"final power/ground group is missing {missing} pad")
     last_slot = by_name[slots[len(pins) - 1]]
     after_name = f"BRK_AFTER_{block.upper()}"
     insertions.append((last_slot.line_index + 1, ["BREAK ;"]))
     break_entries.append({"instance": after_name, "reason": "project_boundary", "after_slot": last_slot.instance})
     for line_index, break_lines in sorted(insertions, reverse=True):
         lines[line_index:line_index] = break_lines
-
-    # Reserved template-owned positions must never be touched by the A mapping.
-    if set(slots) & set(RESERVED_VERTICAL_POWER_GROUND_SLOTS):
-        raise ConfigError("internal configuration error: user slot list overlaps reserved power/ground slots")
 
     ending = "\n" if template_text.endswith("\n") else ""
     map_doc = {

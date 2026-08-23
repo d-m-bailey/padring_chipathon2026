@@ -27,7 +27,6 @@ class BlockVariant:
     width: Decimal
     height: Decimal
     area: int
-    vss_fixed: tuple[str, ...] = ()
     blockages: tuple[tuple[Decimal, Decimal, Decimal, Decimal], ...] = ()
 
 
@@ -44,21 +43,20 @@ def _slots(*ranges: str) -> tuple[str, ...]:
 BLOCK_VARIANTS = {
     v.code: v
     for v in (
-        BlockVariant("A", _slots("W12-W22", "N01-N11"), (Decimal(350), Decimal(1475)), Decimal(1110), Decimal(1110), 1_232_100, ("W12",)),
-        BlockVariant("BV", _slots("W12-W22", "N01-N05"), (Decimal(350), Decimal(1475)), Decimal(550), Decimal(1110), 610_500, ("W12",)),
+        BlockVariant("A", _slots("W12-W22", "N01-N11"), (Decimal(350), Decimal(1475)), Decimal(1110), Decimal(1110), 1_232_100),
+        BlockVariant("BV", _slots("W12-W22", "N01-N05"), (Decimal(350), Decimal(1475)), Decimal(550), Decimal(1110), 610_500),
         BlockVariant("BH", _slots("W18-W22", "N01-N11"), (Decimal(350), Decimal(2035)), Decimal(1110), Decimal(550), 610_500),
-        BlockVariant("CH", _slots("W12-W17"), (Decimal(350), Decimal(1475)), Decimal(1110), Decimal(550), 610_500, ("W12",)),
+        BlockVariant("CH", _slots("W12-W17"), (Decimal(350), Decimal(1475)), Decimal(1110), Decimal(550), 610_500),
         BlockVariant("CV", _slots("N06-N11"), (Decimal(910), Decimal(1475)), Decimal(550), Decimal(1110), 610_500),
         BlockVariant("D", _slots("W18-W22", "N01-N05"), (Decimal(350), Decimal(2035)), Decimal(550), Decimal(550), 302_500),
         BlockVariant("EV", _slots("N06-N11"), (Decimal(910), Decimal(2035)), Decimal(550), Decimal(550), 302_500),
-        BlockVariant("EH", _slots("W12-W17"), (Decimal(350), Decimal(1475)), Decimal(550), Decimal(550), 302_500, ("W12",)),
-        BlockVariant("ACV", _slots("W12-W22", "N01-N16"), (Decimal(350), Decimal(1475)), Decimal(1675), Decimal(1110), 1_859_250, ("W12",)),
-        BlockVariant("ACH", _slots("W07-W22", "N01-N11"), (Decimal(350), Decimal(910)), Decimal(1110), Decimal(1675), 1_859_250, ("W11", "W12")),
-        BlockVariant("ACE", _slots("W07-W22", "N01-N16"), (Decimal(350), Decimal(910)), Decimal(1675), Decimal(1675), 2_805_625, ("W11", "W12")),
+        BlockVariant("EH", _slots("W12-W17"), (Decimal(350), Decimal(1475)), Decimal(550), Decimal(550), 302_500),
+        BlockVariant("ACV", _slots("W12-W22", "N01-N16"), (Decimal(350), Decimal(1475)), Decimal(1675), Decimal(1110), 1_859_250),
+        BlockVariant("ACH", _slots("W07-W22", "N01-N11"), (Decimal(350), Decimal(910)), Decimal(1110), Decimal(1675), 1_859_250),
+        BlockVariant("ACE", _slots("W07-W22", "N01-N16"), (Decimal(350), Decimal(910)), Decimal(1675), Decimal(1675), 2_805_625),
         BlockVariant(
             "ACE2", _slots("W07-W22", "N01-N16", "E16-E01", "S22-S07"),
             (Decimal(350), Decimal(350)), Decimal(2235), Decimal(2235), 5_308_750,
-            ("W11", "W12", "E11", "E12"),
             ((Decimal(0), Decimal(0), Decimal(560), Decimal(560)),
              (Decimal(1675), Decimal(1675), Decimal(2235), Decimal(2235))),
         ),
@@ -123,7 +121,7 @@ def select_block_variants(
         variant for variant in BLOCK_VARIANTS.values()
         if width <= variant.width
         and height <= variant.height
-        and pin_count <= len(variant.slots) - len(variant.vss_fixed)
+        and pin_count <= len(variant.slots)
     ]
     if not fitting:
         raise ConfigError(f"no block variant fits {width} x {height} microns and {pin_count} pins")
@@ -299,7 +297,7 @@ def generate_project_def(
         raise ConfigError("at least one non-empty routing blockage layer is required")
     if len(routing_layers) != len(set(routing_layers)):
         raise ConfigError("routing blockage layer names must be unique")
-    capacity = len(variant.slots) - len(variant.vss_fixed)
+    capacity = len(variant.slots)
     if len(pads) > capacity:
         raise ConfigError(f"variant {variant.code} has {capacity} participant pin sites but mapping contains {len(pads)} pins")
 
@@ -413,7 +411,7 @@ def generate_project_def(
         "source_padring_def": str(padring_def), "variant": variant.code,
         "origin_microns": [str(v) for v in variant.origin], "origin_dbu": list(origin),
         "size_microns": [str(variant.width), str(variant.height)], "diearea_dbu": [0, 0, *size],
-        "usable_area": variant.area, "vss_fixed": list(variant.vss_fixed),
+        "usable_area": variant.area,
         "blockages": [list(rect) for rect in blockage_rects],
         "routing_blockage_layers": list(routing_layers),
         "pins": [

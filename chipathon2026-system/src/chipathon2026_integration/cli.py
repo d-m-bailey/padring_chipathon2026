@@ -250,7 +250,7 @@ def main(argv: list[str] | None = None) -> int:
                     if (
                         selected.width < Decimal(str(project_width))
                         or selected.height < Decimal(str(project_height))
-                        or len(selected.slots) - len(selected.vss_fixed) < len(pins)
+                        or len(selected.slots) < len(pins)
                     ):
                         raise IntegrationError(
                             f"variant {selected.code} does not fit the requested project dimensions and pin count"
@@ -363,7 +363,6 @@ def main(argv: list[str] | None = None) -> int:
                         "origin_microns": [str(value) for value in variant.origin],
                         "size_microns": [str(variant.width), str(variant.height)],
                         "area": variant.area,
-                        "vss_fixed": list(variant.vss_fixed),
                     }
                     for code, variant in BLOCK_VARIANTS.items()
                 },
