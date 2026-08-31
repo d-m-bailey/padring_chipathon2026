@@ -243,6 +243,7 @@ def main(argv: list[str] | None = None) -> int:
                 project_width=project_width,
                 project_height=project_height,
                 pin_count=len(pins),
+                io_types=(str(pin.get("io_type")) for pin in pins),
             )
             if args.variant:
                 selected = BLOCK_VARIANTS[args.variant]
@@ -296,6 +297,7 @@ def main(argv: list[str] | None = None) -> int:
                 project_width=project_width,
                 project_height=project_height,
                 pin_count=len(pins),
+                io_types=(str(pin.get("io_type")) for pin in pins),
             )
             layers = tuple(args.routing_layers or GF180_ROUTING_LAYERS)
             lef_paths = required_lef_paths(args.tech_pdk)
@@ -363,6 +365,12 @@ def main(argv: list[str] | None = None) -> int:
                         "origin_microns": [str(value) for value in variant.origin],
                         "size_microns": [str(variant.width), str(variant.height)],
                         "area": variant.area,
+                        "blockages_microns": [
+                            [str(value) for value in rect] for rect in variant.blockages
+                        ],
+                        "metal2_blockages_microns": [
+                            [str(value) for value in rect] for rect in variant.metal2_blockages
+                        ],
                     }
                     for code, variant in BLOCK_VARIANTS.items()
                 },

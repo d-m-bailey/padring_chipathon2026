@@ -734,15 +734,21 @@ padring DEF. They must not be positioned again from I/O-cell placement or LEF
 macro dimensions. LEF terminal definitions identify which padring geometry is
 project-facing and which routing layer belongs to the terminal. All qualifying
 rectangles remain separate and stay on their original routing layers. Their
-span parallel to the DIEAREA boundary is preserved; their span normal to the
-boundary is replaced by the inward stub described below.
+span parallel to the DIEAREA boundary is preserved except where it must be
+clipped to the local DIEAREA; their span normal to the boundary is replaced by
+the inward stub described below.
 
 All innermost rectangles for a selected terminal must share the same inward
 boundary coordinate: X for west/east pads and Y for north/south pads. That
 coordinate must equal the corresponding user-block DIEAREA boundary. A missing,
-non-unique, or mismatched boundary is an error. The project DEF omits the
-portion of the original terminal outside the user DIEAREA and emits a 1.0
-micron stub beginning at the boundary and extending into the user block:
+non-unique, or mismatched boundary is an error. The project DEF omits every
+portion of the terminal outside the user DIEAREA. After creating the 1.0 micron
+inward stub, intersect the rectangle with the complete local DIEAREA in both X
+and Y. This clips an edge pad's orthogonal extent when it crosses an adjacent
+block boundary; for example, an N06 Metal2 rectangle extending left of an EV
+or CV block begins at local X zero. Emit each clipped rectangle only when its
+intersection has positive width and height; discard an individual rectangle
+whose intersection is empty. The inward stub is:
 
 * west-side pads: boundary X to boundary X + 1 micron;
 * east-side pads: boundary X - 1 micron to boundary X;
@@ -767,12 +773,16 @@ The mapping output preserves, for each generated rectangle:
 * canonical physical pad slot;
 * routing layer and inherited DEF properties;
 * original top-level rectangle;
-* extended and translated user rectangle.
+* extended top-level rectangle;
+* clipped and translated user rectangle.
 
 Generation fails if a mapped padring instance or required named pin is absent,
 the routing layer is unknown, the project-facing boundary is ambiguous, a
-micron input is not exactly representable in inherited DBU, or any translated
-or extended rectangle lies outside the local DIEAREA.
+micron input is not exactly representable in inherited DBU, or clipping leaves
+no positive-area rectangle for the selected terminal inside the local DIEAREA.
+A rectangle that crosses a DIEAREA boundary is clipped, and an individual
+rectangle wholly outside it is omitted; neither condition is itself an error
+when another rectangle for that terminal remains.
 
 ## **24.1 Canonical user-block slot allocations**
 
@@ -804,8 +814,40 @@ For each rectangle in the `Block` column, the generated user DEF emits both a
 placement blockage and routing blockages covering every routing layer. These
 coordinates are local project coordinates. A dash means no blocked rectangle.
 
-Configuration selection considers project width, height, and required pin
-count. Generate every qualifying non-dominated minimum-area configuration.
+The following additional corner blockages are routing blockages on Metal2
+only. They do not create placement blockages or block any other routing layer:
+
+| Variant | Local Metal2 blockage |
+| --- | --- |
+| BV | upper right: `(529,1108)-(550,1110)` |
+| BH | lower left: `(0,0)-(2,21)` |
+| D | upper right: `(529,548)-(550,550)` and lower left: `(0,0)-(2,21)` |
+| ACV | upper right: `(1610,1108)-(1675,1110)` |
+| ACH | lower left: `(0,0)-(2,65)` |
+| ACE | upper right: `(1610,1673)-(1675,1675)` and lower left: `(0,0)-(2,65)` |
+
+For BV, BH, and D, the corner length is 21 microns. For ACV, ACH, and
+ACE, the corner length is 65 microns. Every upper-right blockage is 2 microns
+high and touches the top and right DIEAREA boundaries. Every lower-left
+blockage is 2 microns wide and touches the left and bottom DIEAREA boundaries.
+All coordinates are in local project microns and must be converted exactly to
+the inherited DEF DBU.
+
+The following allocation constraints are part of variant eligibility:
+
+* for EV and CV, the first allocated participant I/O must have `io_type` power
+  or ground;
+* for EH and CH, the last allocated participant I/O must have `io_type` power
+  or ground.
+
+“First” and “last” refer to participant pins in their allocation order, not to
+unused analog placeholder cells. Automatic configuration selection excludes a
+variant whose endpoint constraint is not satisfied. Explicitly requesting such
+a variant is an error.
+
+Configuration selection considers project width, height, required pin count,
+and the endpoint power/ground constraints above. Generate every qualifying
+non-dominated minimum-area configuration.
 Do not emit a larger-area configuration when a smaller-area configuration
 fits (for example, do not generate ACV when A fits). Preserve distinct
 equal-area placements such as EV and EH when both qualify. Project dimensions

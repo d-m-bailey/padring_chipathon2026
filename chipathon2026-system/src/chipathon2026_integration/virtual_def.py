@@ -28,6 +28,7 @@ class BlockVariant:
     height: Decimal
     area: int
     blockages: tuple[tuple[Decimal, Decimal, Decimal, Decimal], ...] = ()
+    metal2_blockages: tuple[tuple[Decimal, Decimal, Decimal, Decimal], ...] = ()
 
 
 def _slots(*ranges: str) -> tuple[str, ...]:
@@ -44,21 +45,51 @@ BLOCK_VARIANTS = {
     v.code: v
     for v in (
         BlockVariant("A", _slots("W12-W22", "N01-N11"), (Decimal(350), Decimal(1475)), Decimal(1110), Decimal(1110), 1_232_100),
-        BlockVariant("BV", _slots("W12-W22", "N01-N05"), (Decimal(350), Decimal(1475)), Decimal(550), Decimal(1110), 610_500),
-        BlockVariant("BH", _slots("W18-W22", "N01-N11"), (Decimal(350), Decimal(2035)), Decimal(1110), Decimal(550), 610_500),
+        BlockVariant(
+            "BV", _slots("W12-W22", "N01-N05"), (Decimal(350), Decimal(1475)),
+            Decimal(550), Decimal(1110), 610_500,
+            metal2_blockages=((Decimal(529), Decimal(1108), Decimal(550), Decimal(1110)),),
+        ),
+        BlockVariant(
+            "BH", _slots("W18-W22", "N01-N11"), (Decimal(350), Decimal(2035)),
+            Decimal(1110), Decimal(550), 610_500,
+            metal2_blockages=((Decimal(0), Decimal(0), Decimal(2), Decimal(21)),),
+        ),
         BlockVariant("CH", _slots("W12-W17"), (Decimal(350), Decimal(1475)), Decimal(1110), Decimal(550), 610_500),
         BlockVariant("CV", _slots("N06-N11"), (Decimal(910), Decimal(1475)), Decimal(550), Decimal(1110), 610_500),
-        BlockVariant("D", _slots("W18-W22", "N01-N05"), (Decimal(350), Decimal(2035)), Decimal(550), Decimal(550), 302_500),
+        BlockVariant(
+            "D", _slots("W18-W22", "N01-N05"), (Decimal(350), Decimal(2035)),
+            Decimal(550), Decimal(550), 302_500,
+            metal2_blockages=(
+                (Decimal(529), Decimal(548), Decimal(550), Decimal(550)),
+                (Decimal(0), Decimal(0), Decimal(2), Decimal(21)),
+            ),
+        ),
         BlockVariant("EV", _slots("N06-N11"), (Decimal(910), Decimal(2035)), Decimal(550), Decimal(550), 302_500),
         BlockVariant("EH", _slots("W12-W17"), (Decimal(350), Decimal(1475)), Decimal(550), Decimal(550), 302_500),
-        BlockVariant("ACV", _slots("W12-W22", "N01-N16"), (Decimal(350), Decimal(1475)), Decimal(1675), Decimal(1110), 1_859_250),
-        BlockVariant("ACH", _slots("W07-W22", "N01-N11"), (Decimal(350), Decimal(910)), Decimal(1110), Decimal(1675), 1_859_250),
-        BlockVariant("ACE", _slots("W07-W22", "N01-N16"), (Decimal(350), Decimal(910)), Decimal(1675), Decimal(1675), 2_805_625),
+        BlockVariant(
+            "ACV", _slots("W12-W22", "N01-N16"), (Decimal(350), Decimal(1475)),
+            Decimal(1675), Decimal(1110), 1_859_250,
+            metal2_blockages=((Decimal(1610), Decimal(1108), Decimal(1675), Decimal(1110)),),
+        ),
+        BlockVariant(
+            "ACH", _slots("W07-W22", "N01-N11"), (Decimal(350), Decimal(910)),
+            Decimal(1110), Decimal(1675), 1_859_250,
+            metal2_blockages=((Decimal(0), Decimal(0), Decimal(2), Decimal(65)),),
+        ),
+        BlockVariant(
+            "ACE", _slots("W07-W22", "N01-N16"), (Decimal(350), Decimal(910)),
+            Decimal(1675), Decimal(1675), 2_805_625,
+            metal2_blockages=(
+                (Decimal(1610), Decimal(1673), Decimal(1675), Decimal(1675)),
+                (Decimal(0), Decimal(0), Decimal(2), Decimal(65)),
+            ),
+        ),
         BlockVariant(
             "ACE2", _slots("W07-W22", "N01-N16", "E16-E01", "S22-S07"),
             (Decimal(350), Decimal(350)), Decimal(2235), Decimal(2235), 5_308_750,
-            ((Decimal(0), Decimal(0), Decimal(560), Decimal(560)),
-             (Decimal(1675), Decimal(1675), Decimal(2235), Decimal(2235))),
+            blockages=((Decimal(0), Decimal(0), Decimal(560), Decimal(560)),
+                       (Decimal(1675), Decimal(1675), Decimal(2235), Decimal(2235))),
         ),
     )
 }
@@ -113,20 +144,34 @@ def select_block_variants(
     *, project_width: Decimal | str | int | float,
     project_height: Decimal | str | int | float,
     pin_count: int,
+    io_types: Iterable[str],
 ) -> tuple[BlockVariant, ...]:
     width, height = _decimal(project_width, "project width"), _decimal(project_height, "project height")
     if width <= 0 or height <= 0 or pin_count < 0:
         raise ConfigError("project width and height must be positive and pin count must be non-negative")
+    ordered_io_types = tuple(io_types)
+    if len(ordered_io_types) != pin_count:
+        raise ConfigError("ordered io_type count must match participant pin count")
     fitting = [
         variant for variant in BLOCK_VARIANTS.values()
         if width <= variant.width
         and height <= variant.height
         and pin_count <= len(variant.slots)
+        and _variant_endpoint_eligible(variant, ordered_io_types)
     ]
     if not fitting:
         raise ConfigError(f"no block variant fits {width} x {height} microns and {pin_count} pins")
     minimum_area = min(variant.area for variant in fitting)
     return tuple(variant for variant in fitting if variant.area == minimum_area)
+
+
+def _variant_endpoint_eligible(variant: BlockVariant, io_types: tuple[str, ...]) -> bool:
+    supply_types = {"power", "ground"}
+    if variant.code in {"EV", "CV"}:
+        return bool(io_types) and io_types[0] in supply_types
+    if variant.code in {"EH", "CH"}:
+        return bool(io_types) and io_types[-1] in supply_types
+    return True
 
 
 def load_mapping(path: Path) -> dict[str, Any]:
@@ -209,12 +254,23 @@ def _extend_and_translate(
         else:
             values[1], values[3] = boundary, boundary + extension
         extended = DefRect(rect.layer, *values)
-        local = DefRect(rect.layer, values[0] - ox, values[1] - oy, values[2] - ox, values[3] - oy)
-        if local.x1 < 0 or local.y1 < 0 or local.x2 > width or local.y2 > height:
-            raise ConfigError(
-                f"translated geometry for {slot} lies outside user block (0,0)-({width},{height}): {local}"
-            )
+        translated = DefRect(
+            rect.layer, values[0] - ox, values[1] - oy,
+            values[2] - ox, values[3] - oy,
+        )
+        local = DefRect(
+            rect.layer,
+            max(0, translated.x1), max(0, translated.y1),
+            min(width, translated.x2), min(height, translated.y2),
+        )
+        if local.x1 >= local.x2 or local.y1 >= local.y2:
+            continue
         output.append(ProjectRect(rect.layer, rect, extended, local))
+    if not output:
+        raise ConfigError(
+            f"clipping geometry for {slot} to user block (0,0)-({width},{height}) "
+            "leaves no positive-area rectangles for the terminal"
+        )
     return tuple(output)
 
 
@@ -293,6 +349,12 @@ def generate_project_def(
         raise ConfigError(f"unknown block variant {variant_code!r}") from exc
     mapping = load_mapping(mapping_path)
     pads = mapped_pads(mapping)
+    io_types = tuple(str(pad.get("io_type")) for pad in pads)
+    if not _variant_endpoint_eligible(variant, io_types):
+        endpoint = "first" if variant.code in {"EV", "CV"} else "last"
+        raise ConfigError(
+            f"variant {variant.code} requires its {endpoint} participant I/O to be power or ground"
+        )
     if not routing_layers or any(not layer.strip() for layer in routing_layers):
         raise ConfigError("at least one non-empty routing blockage layer is required")
     if len(routing_layers) != len(set(routing_layers)):
@@ -396,13 +458,19 @@ def generate_project_def(
         tuple(micron_to_dbu(value, design.units, f"{variant.code} blockage") for value in rect)
         for rect in variant.blockages
     ]
-    blockage_count = len(blockage_rects) * (1 + len(routing_layers))
+    metal2_blockage_rects = [
+        tuple(micron_to_dbu(value, design.units, f"{variant.code} Metal2 blockage") for value in rect)
+        for rect in variant.metal2_blockages
+    ]
+    blockage_count = len(blockage_rects) * (1 + len(routing_layers)) + len(metal2_blockage_rects)
     if blockage_count:
         lines.append(f"BLOCKAGES {blockage_count} ;")
         for x1, y1, x2, y2 in blockage_rects:
             lines.append(f"- PLACEMENT + RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
             for layer in routing_layers:
                 lines.append(f"- LAYER {layer} + RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
+        for x1, y1, x2, y2 in metal2_blockage_rects:
+            lines.append(f"- LAYER Metal2 + RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
         lines.append("END BLOCKAGES")
     lines.extend(["END DESIGN", ""])
 
@@ -413,6 +481,7 @@ def generate_project_def(
         "size_microns": [str(variant.width), str(variant.height)], "diearea_dbu": [0, 0, *size],
         "usable_area": variant.area,
         "blockages": [list(rect) for rect in blockage_rects],
+        "metal2_blockages": [list(rect) for rect in metal2_blockage_rects],
         "routing_blockage_layers": list(routing_layers),
         "pins": [
             {

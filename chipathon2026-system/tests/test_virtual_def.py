@@ -4,10 +4,12 @@ import pytest
 import yaml
 
 from chipathon2026_integration.errors import ConfigError
+from chipathon2026_integration.defparse import DefRect
 from chipathon2026_integration.virtual_def import (
     BLOCK_VARIANTS,
     _project_pin_name,
     _project_terminal_name,
+    _extend_and_translate,
     generate_project_def,
     micron_to_dbu,
     resolve_layout_text_case,
@@ -86,9 +88,23 @@ END DESIGN
 
 
 def test_minimal_variant_selection_preserves_equal_area_placements():
-    variants = select_block_variants(project_width="500", project_height="500", pin_count=5)
+    variants = select_block_variants(
+        project_width="500", project_height="500", pin_count=5,
+        io_types=["power", "input_cmos", "input_cmos", "input_cmos", "ground"],
+    )
     assert [variant.code for variant in variants] == ["D", "EV", "EH"]
-    assert select_block_variants(project_width="1000", project_height="1000", pin_count=21)[0].code == "A"
+    assert select_block_variants(
+        project_width="1000", project_height="1000", pin_count=21,
+        io_types=["input_cmos"] * 21,
+    )[0].code == "A"
+
+
+def test_variant_selection_enforces_endpoint_supply_pads():
+    variants = select_block_variants(
+        project_width="500", project_height="500", pin_count=5,
+        io_types=["input_cmos", "power", "input_cmos", "ground", "input_cmos"],
+    )
+    assert [variant.code for variant in variants] == ["D"]
 
 
 def test_micron_conversion_rejects_inexact_values():
@@ -166,10 +182,26 @@ def test_project_def_and_metadata_use_layout_text_case(tmp_path):
     assert pu["project_pin"] == "reset_n_pu"
 
 
-def test_out_of_bounds_geometry_is_rejected(tmp_path):
+def test_out_of_bounds_geometry_is_clipped(tmp_path):
     mp, dp, lp = setup_files(tmp_path, outside=True)
-    with pytest.raises(ConfigError, match="outside user block"):
-        generate_project_def(mapping_path=mp, padring_def=dp, lef_paths=[lp], variant_code="D")
+    _text, metadata = generate_project_def(
+        mapping_path=mp, padring_def=dp, lef_paths=[lp], variant_code="D"
+    )
+    rectangle = metadata["pins"][0]["rectangles"][0]
+    assert rectangle["extended_top_level"] == [350000, 2034000, 351000, 2040500]
+    assert rectangle["translated_user"] == [0, 0, 1000, 5500]
+
+
+def test_fully_outside_rectangle_is_omitted_when_terminal_has_valid_geometry():
+    rectangles = _extend_and_translate(
+        [
+            DefRect("Metal2", -3248, 110000, -1198, 112000),
+            DefRect("Metal2", -878, 110000, 1172, 112000),
+        ],
+        slot="N06", origin=(0, 0), size=(110000, 110000), extension=200,
+    )
+    assert len(rectangles) == 1
+    assert rectangles[0].local == DefRect("Metal2", 0, 109800, 1172, 110000)
 
 
 def test_ace2_blocks_placement_and_every_routing_layer(tmp_path):
@@ -183,6 +215,32 @@ def test_ace2_blocks_placement_and_every_routing_layer(tmp_path):
     assert text.count("- LAYER Metal") == 10
     assert metadata["usable_area"] == 5_308_750
     assert metadata["blockages"][1] == [335000, 335000, 447000, 447000]
+
+
+@pytest.mark.parametrize(
+    ("variant", "expected"),
+    [
+        ("BV", [[105800, 221600, 110000, 222000]]),
+        ("BH", [[0, 0, 400, 4200]]),
+        ("D", [[105800, 109600, 110000, 110000], [0, 0, 400, 4200]]),
+        ("ACV", [[322000, 221600, 335000, 222000]]),
+        ("ACH", [[0, 0, 400, 13000]]),
+        ("ACE", [[322000, 334600, 335000, 335000], [0, 0, 400, 13000]]),
+    ],
+)
+def test_variant_metal2_corner_blockages(tmp_path, variant, expected):
+    mp = tmp_path / "map.yaml"
+    mp.write_text("pads: []\n", encoding="utf-8")
+    dp = tmp_path / "ring.def"
+    dp.write_text(
+        "VERSION 5.8 ;\nDESIGN ring ;\nUNITS DISTANCE MICRONS 200 ;\nEND DESIGN\n",
+        encoding="utf-8",
+    )
+    text, metadata = generate_project_def(
+        mapping_path=mp, padring_def=dp, lef_paths=[], variant_code=variant
+    )
+    assert metadata["metal2_blockages"] == expected
+    assert text.count("- LAYER Metal2 + RECT") == len(expected)
 
 
 def test_definitive_ace2_slot_order_and_corrected_blockage():

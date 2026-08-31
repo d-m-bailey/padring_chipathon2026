@@ -140,7 +140,14 @@ repeat `--routing-layer` to override that layer list. Coordinates are accepted
 in microns and must be exactly representable in the padring DEF database grid.
 Pin geometry is read from named padring DEF pins. Each project pin starts at
 the I/O terminal's innermost block boundary, extends 1 micron into the block,
-and is translated to a local DIEAREA beginning at `(0,0)`.
+and is translated to a local DIEAREA beginning at `(0,0)`. Rectangle portions
+outside that DIEAREA are clipped; wholly outside rectangles are omitted as long
+as another positive-area rectangle remains for the terminal.
+EV/CV require the first participant I/O to be power or ground, while EH/CH
+require the last participant I/O to be power or ground. Incompatible variants
+are excluded from automatic selection and rejected when explicitly requested.
+BV, BH, D, ACV, ACH, and ACE also emit their specified Metal2-only corner
+routing blockages; D and ACE have both lower-left and upper-right blockages.
 Input-pad `Y` terminals use the bare user pad name. Bidirectional `Y` and `A`
 terminals use `<pad>_IN` and `<pad>_OUT`, respectively; other terminal names
 retain their cell-terminal suffix.
