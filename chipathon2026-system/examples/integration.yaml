@@ -1,0 +1,15 @@
+schema_version: 2
+
+base_chip: base_chip.yaml
+
+chip:
+  name: chipathon_example
+  minimum_project_gap_um: 10
+
+projects:
+  - team: A01
+    variant: A
+    quadrant: NW
+  - team: D05
+    variant: EV
+    quadrant: SE

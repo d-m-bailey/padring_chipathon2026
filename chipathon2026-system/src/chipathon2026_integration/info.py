@@ -32,7 +32,10 @@ def get_lvs_config_reference(info: dict[str, Any]) -> str:
     return value.strip()
 
 
-def validate_pins(info: dict[str, Any]) -> list[dict[str, Any]]:
+def validate_pins(
+    info: dict[str, Any], *, io_cells: dict[str, str] | None = None,
+) -> list[dict[str, Any]]:
+    allowed_io_cells = IO_CELLS if io_cells is None else io_cells
     pins = info.get("pins")
     if not isinstance(pins, list) or not pins:
         raise ConfigError("info.yaml must contain a non-empty top-level 'pins' list")
@@ -53,10 +56,10 @@ def validate_pins(info: dict[str, Any]) -> list[dict[str, Any]]:
             raise ConfigError(f"{where}: duplicate user pin name {name!r}")
         seen_names.add(name)
 
-        if not isinstance(io_type, str) or io_type not in IO_CELLS:
+        if not isinstance(io_type, str) or io_type not in allowed_io_cells:
             raise ConfigError(
                 f"{where} ({name}): unsupported io_type {io_type!r}; "
-                f"expected one of: {', '.join(IO_CELLS)}"
+                f"expected one of: {', '.join(allowed_io_cells)}"
             )
 
         if io_type == "analog":

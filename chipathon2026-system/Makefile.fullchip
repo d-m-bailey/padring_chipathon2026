@@ -1,0 +1,53 @@
+# Build one full Chipathon 2026 integrated chip.
+
+MAKEFILE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+REPOSITORY_ROOT := $(abspath $(MAKEFILE_DIR)..)
+PADRING_BUILD_DIR ?= $(REPOSITORY_ROOT)/build
+PADRING ?= $(PADRING_BUILD_DIR)/padring
+CHIP_CONFIG ?= integration.yaml
+BASE_CHIP ?=
+INFO_ROOT ?= info
+PROJECT_ROOT ?= build/padframes
+GDS_ROOT ?= gds
+OUTPUT_ROOT ?= build/integrated
+TEMPLATE ?= $(MAKEFILE_DIR)padring_template.cfg
+PDK_ROOT ?= /foss/pdks
+PDK ?= gf180mcuD
+TECH_PDK ?= $(PDK_ROOT)/$(PDK)
+KLAYOUT ?= klayout
+PYTHON ?= python3
+FULLCHIP ?= env PYTHONPATH=$(MAKEFILE_DIR)src $(PYTHON) -m chipathon2026_integration.fullchip_cli
+DEF_DBU ?= 0.005
+OUTLINE_LAYER ?= 0
+OUTLINE_DATATYPE ?= 0
+PIN_TEXT_LAYER ?= 81
+PIN_TEXT_DATATYPE ?= 10
+PAD_MARKER_LAYER ?= 37
+PAD_MARKER_DATATYPE ?= 0
+VALIDATION_ONLY ?=
+
+.DEFAULT_GOAL := all
+.PHONY: all validate
+
+all:
+	$(FULLCHIP) $(CHIP_CONFIG) \
+		$(if $(BASE_CHIP),--base-chip $(BASE_CHIP)) \
+		--info-root $(INFO_ROOT) \
+		--project-root $(PROJECT_ROOT) \
+		--gds-root $(GDS_ROOT) \
+		--template $(TEMPLATE) \
+		--padring $(PADRING) \
+		--tech-pdk $(TECH_PDK) \
+		--output-root $(OUTPUT_ROOT) \
+		--klayout $(KLAYOUT) \
+		--def-dbu $(DEF_DBU) \
+		--outline-layer $(OUTLINE_LAYER) \
+		--outline-datatype $(OUTLINE_DATATYPE) \
+		--pin-text-layer $(PIN_TEXT_LAYER) \
+		--pin-text-datatype $(PIN_TEXT_DATATYPE) \
+		--pad-marker-layer $(PAD_MARKER_LAYER) \
+		--pad-marker-datatype $(PAD_MARKER_DATATYPE) \
+		$(VALIDATION_ONLY)
+
+validate:
+	$(MAKE) -f $(lastword $(MAKEFILE_LIST)) all VALIDATION_ONLY=--validation-only

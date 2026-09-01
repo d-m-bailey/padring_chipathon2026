@@ -1,0 +1,52 @@
+schema_version: 1
+
+chip:
+  name: chipathon2026_2935_v1
+  diearea_um: [0, 0, 2935, 2935]
+
+io_cells:
+  input_cmos: gf180mcu_fd_io__in_c
+  input_schmitt: gf180mcu_fd_io__in_s
+  bidirectional: gf180mcu_fd_io__bi_t
+  bidirectional_24ma: gf180mcu_fd_io__bi_24t
+  analog: gf180mcu_fd_io__asig_5p0
+  power: gf180mcu_fd_io__dvdd
+  ground: gf180mcu_fd_io__dvss
+
+block_variants:
+  A:
+    origin_um: [350, 1475]
+    size_um: [1110, 1110]
+  BV:
+    origin_um: [350, 1475]
+    size_um: [550, 1110]
+  BH:
+    origin_um: [350, 2035]
+    size_um: [1110, 550]
+  CH:
+    origin_um: [350, 1475]
+    size_um: [1110, 550]
+  CV:
+    origin_um: [910, 1475]
+    size_um: [550, 1110]
+  D:
+    origin_um: [350, 2035]
+    size_um: [550, 550]
+  EV:
+    origin_um: [910, 2035]
+    size_um: [550, 550]
+  EH:
+    origin_um: [350, 1475]
+    size_um: [550, 550]
+  ACV:
+    origin_um: [350, 1475]
+    size_um: [1675, 1110]
+  ACH:
+    origin_um: [350, 910]
+    size_um: [1110, 1675]
+  ACE:
+    origin_um: [350, 910]
+    size_um: [1675, 1675]
+  ACE2:
+    origin_um: [350, 350]
+    size_um: [2235, 2235]

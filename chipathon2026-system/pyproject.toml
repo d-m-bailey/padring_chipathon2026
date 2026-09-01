@@ -19,6 +19,7 @@ dev = ["pytest>=8"]
 [project.scripts]
 chipathon-integrate = "chipathon2026_integration.cli:main"
 chipathon-download-gds = "chipathon2026_integration.downloader:main"
+chipathon-fullchip = "chipathon2026_integration.fullchip_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

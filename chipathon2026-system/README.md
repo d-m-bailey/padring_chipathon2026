@@ -3,6 +3,24 @@
 Python implementation recreated from the live `ChatGPT_spec.md` in
 `d-m-bailey/padring_chipathon2026` on branch `chipathon2026`.
 
+The separate full-chip subsystem defined by `integration_spec.md` combines
+canonical project DEF/GDS artifacts and one newly generated chip-wide padring.
+Its entry point is `chipathon-fullchip`, with a Makefile wrapper:
+
+Start from `examples/integration.yaml` and `examples/base_chip.yaml`. Relative
+`base_chip` paths are resolved from the integration YAML's directory.
+
+```bash
+make -f chipathon2026-system/Makefile.fullchip \
+  CHIP_CONFIG=integration.yaml \
+  TECH_PDK=/path/to/gf180mcuD \
+  PADRING=/path/to/padring
+```
+
+Use the `validate` target to inspect project GDS PR boundaries, variant
+eligibility, transformed placement, spacing, and pad-slot ownership without
+running padring or producing the integrated GDS.
+
 ## What is implemented
 
 - Parse and validate participant `info.yaml`.
