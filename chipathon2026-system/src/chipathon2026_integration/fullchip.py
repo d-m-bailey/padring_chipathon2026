@@ -475,7 +475,9 @@ def _validate_placements(chip: ChipRequest, placements: list[Placement]) -> None
 
 
 def _requested_pad_flip(quadrant: str, side: str) -> bool:
-    return (quadrant, side) in {("NE", "N"), ("SE", "S"), ("SE", "E"), ("SW", "W")}
+    return (quadrant, side) in {
+        ("NE", "N"), ("NE", "E"), ("SW", "S"), ("SW", "W"),
+    }
 
 
 def _format_pad(original: str, cell: str, *, flip: bool | None = None) -> str:

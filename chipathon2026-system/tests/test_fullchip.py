@@ -158,16 +158,25 @@ def test_chip_padring_uses_base_chip_io_cell_mapping(tmp_path: Path):
 
 
 @pytest.mark.parametrize(
-    ("quadrant", "slots", "flipped_slot", "normal_slot"),
+    ("quadrant", "slots", "flipped_slots", "normal_slots"),
     [
-        ("NE", tuple([f"E{i:02d}" for i in range(12, 23)] + ["N22"]), "N22", "E12"),
-        ("SE", tuple([f"E{i:02d}" for i in range(11, 0, -1)] + ["S22"]), "S22", None),
-        ("SW", tuple([f"W{i:02d}" for i in range(11, 0, -1)] + ["S01"]), "W11", "S01"),
+        (
+            "NE", tuple([f"E{i:02d}" for i in range(12, 23)] + ["N22"]),
+            ("E12", "N22"), (),
+        ),
+        (
+            "SE", tuple([f"E{i:02d}" for i in range(11, 0, -1)] + ["S22"]),
+            (), ("E11", "S22"),
+        ),
+        (
+            "SW", tuple([f"W{i:02d}" for i in range(11, 0, -1)] + ["S01"]),
+            ("W11", "S01"), (),
+        ),
     ],
 )
 def test_chip_padring_applies_quadrant_side_flips(
     tmp_path: Path, quadrant: str, slots: tuple[str, ...],
-    flipped_slot: str, normal_slot: str | None,
+    flipped_slots: tuple[str, ...], normal_slots: tuple[str, ...],
 ):
     template = Path(__file__).parents[1] / "padring_template.cfg"
     request = ProjectRequest("A01", "A", quadrant)
@@ -185,11 +194,12 @@ def test_chip_padring_applies_quadrant_side_flips(
     )
     chip = ChipRequest("demo", _base_chip(tmp_path), 10, (request,))
     cfg, mapping = generate_chip_padring(chip, [placement], template)
-    flipped = next(pad for pad in mapping["pads"] if pad["slot"] == flipped_slot)
-    assert flipped["requested_flip"] is True
-    assert flipped["effective_flip"] is True
-    assert f"PAD {flipped_slot} {flipped_slot[0]} FLIP {flipped['cell']} ;" in cfg
-    if normal_slot is not None:
+    for flipped_slot in flipped_slots:
+        flipped = next(pad for pad in mapping["pads"] if pad["slot"] == flipped_slot)
+        assert flipped["requested_flip"] is True
+        assert flipped["effective_flip"] is True
+        assert f"PAD {flipped_slot} {flipped_slot[0]} FLIP {flipped['cell']} ;" in cfg
+    for normal_slot in normal_slots:
         normal = next(pad for pad in mapping["pads"] if pad["slot"] == normal_slot)
         assert normal["requested_flip"] is False
         assert normal["effective_flip"] is False

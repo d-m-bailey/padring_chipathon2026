@@ -276,16 +276,22 @@ power, and ground cells, matching the following transformed quadrant and side:
 | --- | --- | --- | --- |
 | NW | any | none beyond normal side placement | no |
 | NE | N | about the Y axis | yes |
-| NE | E | none beyond normal side placement | no |
-| SE | S | about the Y axis | yes |
-| SE | E | about the X axis | yes |
+| NE | E | about the Y axis | yes |
+| SE | S | none beyond normal side placement | no |
+| SE | E | none beyond normal side placement | no |
 | SW | W | about the X axis | yes |
-| SW | S | none beyond normal side placement | no |
+| SW | S | about the X axis | yes |
 
 Any quadrant/side combination not listed as requiring reflection retains the
 normal orientation for that physical side. This rule applies to allocated I/O
 cells, not automatically to corners, fillers, break fillers, or unused slot
 placeholders.
+
+Equivalently, using the NW project as the nominal orientation:
+
+- NW and SE projects use normal padring cell orientations;
+- NE projects flip their north- and east-side I/O cells; and
+- SW projects flip their south- and west-side I/O cells.
 
 `FLIP` changes orientation about the placed cell's bounding-box center. It
 must not change the occupied physical slot or translate the cell into an
