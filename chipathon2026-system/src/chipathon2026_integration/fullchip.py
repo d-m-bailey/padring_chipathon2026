@@ -15,6 +15,7 @@ from .constants import ALL_PHYSICAL_SLOTS
 from .defparse import DefDesign, load_def
 from .errors import ConfigError
 from .info import load_info, validate_pins
+from .lef import parse_lef_files
 from .lvs import load_lvs_config, resolve_downloaded_gds
 from .padring_cfg import PAD_RE, audit_physical_template, parse_pad_entries, safe_identifier
 from .virtual_def import BLOCK_VARIANTS, BlockVariant
@@ -473,12 +474,17 @@ def _validate_placements(chip: ChipRequest, placements: list[Placement]) -> None
         raise ConfigError("project spacing violation(s): " + "; ".join(conflicts))
 
 
-def _format_pad(original: str, cell: str) -> str:
+def _requested_pad_flip(quadrant: str, side: str) -> bool:
+    return (quadrant, side) in {("NE", "N"), ("SE", "S"), ("SE", "E"), ("SW", "W")}
+
+
+def _format_pad(original: str, cell: str, *, flip: bool | None = None) -> str:
     match = PAD_RE.match(original)
     if match is None:
         raise ConfigError(f"internal PAD formatting error: {original!r}")
-    flip = " FLIP" if match.group("flip") else ""
-    return f"{match.group('indent')}PAD {match.group('instance')} {match.group('location')}{flip} {cell} ;{match.group('trailing')}"
+    effective_flip = bool(match.group("flip")) if flip is None else flip
+    flip_text = " FLIP" if effective_flip else ""
+    return f"{match.group('indent')}PAD {match.group('instance')} {match.group('location')}{flip_text} {cell} ;{match.group('trailing')}"
 
 
 def generate_chip_padring(
@@ -530,10 +536,19 @@ def generate_chip_padring(
             region_power |= io_type == "power"
             region_ground |= io_type == "ground"
             top_name = prefix_name(team, pin["name"])
+            entry = by_slot[slot]
+            requested_flip = _requested_pad_flip(
+                placement.artifacts.request.quadrant, entry.location,
+            )
+            effective_flip = entry.flip != requested_flip
             allocated[slot] = {
                 "pin_index": len(allocated), "pin_name": pin["name"], "top_pin_name": top_name,
                 "slot": slot, "instance": slot, "io_type": io_type,
                 "cell": chip.io_cells[io_type], "team_code": team,
+                "quadrant": placement.artifacts.request.quadrant,
+                "template_flip": entry.flip, "requested_flip": requested_flip,
+                "effective_flip": effective_flip,
+                "effective_orientation": "FLIP" if effective_flip else "NORMAL",
                 **({"secondary_esd": pin["secondary_esd"]} if io_type == "analog" else {}),
             }
         if not region_power or not region_ground:
@@ -556,7 +571,9 @@ def generate_chip_padring(
         ])
     for slot, pad in allocated.items():
         entry = by_slot[slot]
-        lines[entry.line_index] = _format_pad(lines[entry.line_index], pad["cell"])
+        lines[entry.line_index] = _format_pad(
+            lines[entry.line_index], pad["cell"], flip=pad["effective_flip"],
+        )
     for index in sorted(break_indexes, reverse=True):
         lines[index:index] = ["BREAK ;"]
     pads = []
@@ -570,6 +587,97 @@ def generate_chip_padring(
         "pin_count": len(allocated), "pads": pads, "breaks": breaks,
     }
     return "\n".join(lines) + ("\n" if text.endswith("\n") else ""), mapping
+
+
+_DEF_SIDE_ORIENTATIONS = {
+    "N": ("S", "FS"),
+    "S": ("N", "FN"),
+    "E": ("W", "FE"),
+    "W": ("E", "FW"),
+}
+
+
+def _component_bbox(
+    x: int, y: int, orientation: str, *, width: int, height: int,
+    origin_x: int, origin_y: int,
+) -> tuple[int, int, int, int]:
+    transforms = {
+        "N": lambda px, py: (px, py),
+        "S": lambda px, py: (-px, -py),
+        "W": lambda px, py: (-py, px),
+        "E": lambda px, py: (py, -px),
+        "FN": lambda px, py: (-px, py),
+        "FS": lambda px, py: (px, -py),
+        "FE": lambda px, py: (-py, -px),
+        "FW": lambda px, py: (py, px),
+    }
+    transform = transforms[orientation]
+    points = [
+        transform(px, py)
+        for px, py in (
+            (-origin_x, -origin_y), (width - origin_x, -origin_y),
+            (-origin_x, height - origin_y),
+            (width - origin_x, height - origin_y),
+        )
+    ]
+    xs, ys = [x + point[0] for point in points], [y + point[1] for point in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def validate_padring_cell_orientations(
+    padring_def: Path, mapping: dict[str, Any], lef_paths: Iterable[Path],
+) -> list[dict[str, Any]]:
+    design = load_def(padring_def)
+    macros = parse_lef_files(lef_paths)
+    records: list[dict[str, Any]] = []
+    for pad in mapping.get("pads", []):
+        if not isinstance(pad, dict) or pad.get("generated"):
+            continue
+        slot = str(pad["slot"])
+        side = slot[0]
+        component = design.components.get(slot)
+        if component is None:
+            raise ConfigError(f"padring DEF is missing allocated I/O-cell instance {slot}")
+        if component.macro != pad["cell"]:
+            raise ConfigError(
+                f"padring DEF instance {slot} uses {component.macro}, expected {pad['cell']}"
+            )
+        macro = macros.get(component.macro)
+        if macro is None:
+            raise ConfigError(f"no LEF macro found for padring instance {slot}/{component.macro}")
+        flipped = bool(pad.get("effective_flip"))
+        normal_orientation, flipped_orientation = _DEF_SIDE_ORIENTATIONS[side]
+        expected_orientation = flipped_orientation if flipped else normal_orientation
+        if component.orientation != expected_orientation:
+            raise ConfigError(
+                f"padring DEF instance {slot} orientation {component.orientation} does not "
+                f"match expected {expected_orientation}"
+            )
+        width = _micron_to_dbu(Decimal(str(macro.width)), design.units, f"{component.macro} width")
+        height = _micron_to_dbu(Decimal(str(macro.height)), design.units, f"{component.macro} height")
+        origin_x = _micron_to_dbu(Decimal(str(macro.origin_x)), design.units, f"{component.macro} origin X")
+        origin_y = _micron_to_dbu(Decimal(str(macro.origin_y)), design.units, f"{component.macro} origin Y")
+        post_bbox = _component_bbox(
+            component.x, component.y, component.orientation, width=width, height=height,
+            origin_x=origin_x, origin_y=origin_y,
+        )
+        # Padring's placement engine already supplies the physical location;
+        # output writers must not add another flip-dependent translation.
+        shift = [0, 0]
+        pre_bbox = post_bbox
+        record = {
+            "slot": slot, "team_code": pad["team_code"], "quadrant": pad.get("quadrant"),
+            "side": side, "requested_flip": bool(pad.get("requested_flip")),
+            "template_flip": bool(pad.get("template_flip")), "effective_flip": flipped,
+            "def_orientation": component.orientation,
+            "placement_shift_dbu": shift,
+            "pre_flip_bbox_dbu": list(pre_bbox), "post_flip_bbox_dbu": list(post_bbox),
+        }
+        pad["def_orientation"] = component.orientation
+        pad["pre_flip_bbox_dbu"] = list(pre_bbox)
+        pad["post_flip_bbox_dbu"] = list(post_bbox)
+        records.append(record)
+    return records
 
 
 def _micron_to_dbu(value: Decimal, units: int, context: str) -> int:

@@ -15,6 +15,7 @@ from chipathon2026_integration.fullchip import (
     prefix_name,
     transform_box,
     transform_slot,
+    validate_padring_cell_orientations,
     write_top_verilog,
 )
 from chipathon2026_integration.constants import IO_CELLS
@@ -154,6 +155,77 @@ def test_chip_padring_uses_base_chip_io_cell_mapping(tmp_path: Path):
     chip = ChipRequest("demo", base, 10, (request,))
     cfg, _ = generate_chip_padring(chip, [placement], template)
     assert "PAD W19 W custom_input_cell ;" in cfg
+
+
+@pytest.mark.parametrize(
+    ("quadrant", "slots", "flipped_slot", "normal_slot"),
+    [
+        ("NE", tuple([f"E{i:02d}" for i in range(12, 23)] + ["N22"]), "N22", "E12"),
+        ("SE", tuple([f"E{i:02d}" for i in range(11, 0, -1)] + ["S22"]), "S22", None),
+        ("SW", tuple([f"W{i:02d}" for i in range(11, 0, -1)] + ["S01"]), "W11", "S01"),
+    ],
+)
+def test_chip_padring_applies_quadrant_side_flips(
+    tmp_path: Path, quadrant: str, slots: tuple[str, ...],
+    flipped_slot: str, normal_slot: str | None,
+):
+    template = Path(__file__).parents[1] / "padring_template.cfg"
+    request = ProjectRequest("A01", "A", quadrant)
+    pins = (
+        {"name": "vss", "io_type": "ground"},
+        {"name": "vdd", "io_type": "power"},
+        *(
+            {"name": f"sig{i}", "io_type": "input_cmos"}
+            for i in range(10)
+        ),
+    )
+    placement = SimpleNamespace(
+        artifacts=SimpleNamespace(request=request, pins=pins),
+        transformed_slots=slots,
+    )
+    chip = ChipRequest("demo", _base_chip(tmp_path), 10, (request,))
+    cfg, mapping = generate_chip_padring(chip, [placement], template)
+    flipped = next(pad for pad in mapping["pads"] if pad["slot"] == flipped_slot)
+    assert flipped["requested_flip"] is True
+    assert flipped["effective_flip"] is True
+    assert f"PAD {flipped_slot} {flipped_slot[0]} FLIP {flipped['cell']} ;" in cfg
+    if normal_slot is not None:
+        normal = next(pad for pad in mapping["pads"] if pad["slot"] == normal_slot)
+        assert normal["requested_flip"] is False
+        assert normal["effective_flip"] is False
+        assert f"PAD {normal_slot} {normal_slot[0]} {normal['cell']} ;" in cfg
+
+
+def test_padring_flip_validation_records_invariant_bbox(tmp_path: Path):
+    lef = tmp_path / "io.lef"
+    lef.write_text(
+        "MACRO IO\n  ORIGIN 0 0 ;\n  SIZE 84 BY 150 ;\nEND IO\n",
+        encoding="utf-8",
+    )
+    output_def = tmp_path / "ring.def"
+    output_def.write_text(
+        "VERSION 5.8 ;\nDESIGN ring ;\nUNITS DISTANCE MICRONS 1000 ;\n"
+        "DIEAREA ( 0 0 ) ( 1200000 1200000 ) ;\nCOMPONENTS 1 ;\n"
+        "- N22 IO + PLACED ( 528000 1050000 ) FS ;\n"
+        "END COMPONENTS\nEND DESIGN\n",
+        encoding="utf-8",
+    )
+    mapping = {
+        "pads": [{
+            "slot": "N22", "cell": "IO", "team_code": "A01", "quadrant": "NE",
+            "template_flip": False, "requested_flip": True, "effective_flip": True,
+        }]
+    }
+    records = validate_padring_cell_orientations(output_def, mapping, [lef])
+    assert records[0]["def_orientation"] == "FS"
+    assert records[0]["placement_shift_dbu"] == [0, 0]
+    assert records[0]["pre_flip_bbox_dbu"] == records[0]["post_flip_bbox_dbu"]
+
+    output_def.write_text(
+        output_def.read_text(encoding="utf-8").replace(" FS ;", " S ;"), encoding="utf-8"
+    )
+    with pytest.raises(ConfigError, match="does not match expected FS"):
+        validate_padring_cell_orientations(output_def, mapping, [lef])
 
 
 def test_top_verilog_separates_input_pad_and_core_net(tmp_path: Path):

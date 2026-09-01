@@ -181,7 +181,7 @@ void DEFWriter::writeCell(const LayoutItem *item)
         }
         else
         {
-            m_ss << " W" << " ;\n";
+            m_ss << " FW" << " ;\n";
         }
     }
 }

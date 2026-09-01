@@ -17,6 +17,7 @@ from .fullchip import (
     json_dump,
     load_chip_request,
     rewrite_pin_csv,
+    validate_padring_cell_orientations,
     write_integrated_def,
     write_top_verilog,
 )
@@ -192,6 +193,14 @@ def main(argv: list[str] | None = None) -> int:
             mapping_path=map_yaml, def_dbu=args.def_dbu,
         )
         lef_paths = required_lef_paths(args.tech_pdk)
+        orientation_records = validate_padring_cell_orientations(
+            ring_def, mapping, lef_paths,
+        )
+        map_yaml.write_text(yaml.safe_dump(mapping, sort_keys=False), encoding="utf-8")
+        json_dump(map_json, mapping)
+        validation["checks"]["per_pad_orientation_and_bounding_box"] = "pass"
+        validation["pad_orientations"] = orientation_records
+        json_dump(report_json, validation)
         io_gds = args.tech_pdk / "libs.ref/gf180mcu_fd_io/gds/gf180mcu_fd_io.gds"
         tech_file = args.tech_pdk / "libs.tech/klayout/tech/gf180mcu.lyt"
         layer_map = args.tech_pdk / "libs.tech/klayout/tech/gf180mcu.map"
@@ -235,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
             "diearea_microns": [str(v) for v in chip.diearea],
             "io_cells": chip.io_cells,
             "minimum_project_gap_microns": str(chip.minimum_gap), "projects": placement_docs,
+            "pad_orientations": orientation_records,
             "pin_count": len(pin_rows), "pin_text_layer": [args.pin_text_layer, args.pin_text_datatype],
             "validation_report": str(report_json),
             "inputs": {

@@ -259,6 +259,54 @@ one physical slot.
 
 Two projects may not allocate the same physical I/O slot.
 
+### 7.1 Per-pad orientation after quadrant transformation
+
+Quadrant transformation also controls the orientation of each project-owned
+I/O cell. The padring configuration supports this per cell with the optional
+`FLIP` modifier on an individual `PAD` directive. The integration subsystem
+must emit that modifier where required. No configuration-grammar or row-
+placement algorithm change is required. Output writers must use the placement
+engine's resolved position directly without adding their own flip-dependent
+translation.
+
+Apply `FLIP` to every project-allocated I/O cell, including signal, analog,
+power, and ground cells, matching the following transformed quadrant and side:
+
+| Project quadrant | Transformed padring side | Required reflection | `FLIP` |
+| --- | --- | --- | --- |
+| NW | any | none beyond normal side placement | no |
+| NE | N | about the Y axis | yes |
+| NE | E | none beyond normal side placement | no |
+| SE | S | about the Y axis | yes |
+| SE | E | about the X axis | yes |
+| SW | W | about the X axis | yes |
+| SW | S | none beyond normal side placement | no |
+
+Any quadrant/side combination not listed as requiring reflection retains the
+normal orientation for that physical side. This rule applies to allocated I/O
+cells, not automatically to corners, fillers, break fillers, or unused slot
+placeholders.
+
+`FLIP` changes orientation about the placed cell's bounding-box center. It
+must not change the occupied physical slot or translate the cell into an
+adjacent gap. After placement, the normalized top-level bounding box of each
+flipped I/O-cell instance must be identical to the bounding box produced for
+the same cell in that slot without `FLIP`; only the internal geometry and pin
+orientation may differ. A bounding-box coordinate or dimension change is a
+generation error.
+
+Padring's placement engine supplies the physical slot coordinate. DEF, GDS,
+and SVG writers must not add a second flip-dependent X or Y translation.
+Changing `FLIP` therefore changes only orientation; its additional placement
+offset is exactly `(0,0)`. In particular, writers must not add or subtract the
+75-micron GF180 I/O-cell width.
+
+If a future physical template supplies an explicit orientation for an
+allocated slot, the generator must resolve the requested project reflection
+against that orientation deterministically and emit the effective per-pad
+orientation exactly once. It must not produce duplicate orientation tokens or
+silently discard the project reflection.
+
 ## 8. Chip-wide padring generation
 
 The subsystem generates one new chip-wide padring configuration from all
@@ -270,6 +318,7 @@ Generation proceeds in deterministic project/YAML order while preserving each
 project's authoritative internal pin order. For every project:
 
 - place its transformed I/O cells in its derived physical slots;
+- apply the per-pad `FLIP` rules in section 7.1;
 - retain a break immediately before its first allocated I/O cell;
 - retain a break immediately after its last allocated I/O cell, including when
   the next project begins in an adjacent slot range;
@@ -282,6 +331,10 @@ must never be removed as an optimization.
 
 The generated padring top cell and Verilog module are named
 `<chip_name>_padring`.
+
+After padring runs, validate every allocated I/O-cell instance against its
+expected physical slot bounding box. Report the quadrant, side, effective
+orientation, and pre-/post-reflection bounding boxes in the placement manifest.
 
 ## 9. Project spacing and overlap validation
 
@@ -455,6 +508,8 @@ The machine-readable manifest records at least:
 - canonical and transformed PR boundaries;
 - exact DEF and GDS transforms;
 - canonical-to-physical I/O-slot mapping;
+- requested and effective per-pad orientation plus pre-/post-flip bounding
+  boxes;
 - source and final project top-cell names;
 - final hierarchy cell-name mapping;
 - resolved project-pin names;
@@ -479,6 +534,7 @@ reports:
 - project/chip containment;
 - pairwise overlap and 10-micron spacing;
 - duplicate physical-slot allocation;
+- per-pad quadrant/side orientation and bounding-box invariance;
 - project pin-name collision checks;
 - DEF/GDS/Verilog instance consistency;
 - GDS library and exported cell-name uniqueness;
