@@ -25,7 +25,7 @@ QUADRANTS = {"NW", "NE", "SE", "SW"}
 SUPPLY_TYPES = {"power", "ground"}
 BLOCKAGE_RE = re.compile(
     r"-\s+(?:(?P<placement>PLACEMENT)|LAYER\s+(?P<layer>\S+))\s+"
-    r"\+\s+RECT\s+\(\s*(?P<x1>-?\d+)\s+(?P<y1>-?\d+)\s*\)\s+"
+    r"RECT\s+\(\s*(?P<x1>-?\d+)\s+(?P<y1>-?\d+)\s*\)\s+"
     r"\(\s*(?P<x2>-?\d+)\s+(?P<y2>-?\d+)\s*\)\s*;"
 )
 
@@ -805,7 +805,7 @@ def write_integrated_def(
         lines.append(f"BLOCKAGES {len(blockages)} ;")
         for kind, (x1, y1, x2, y2) in blockages:
             prefix = "PLACEMENT" if kind == "PLACEMENT" else f"LAYER {kind}"
-            lines.append(f"- {prefix} + RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
+            lines.append(f"- {prefix} RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
         lines.append("END BLOCKAGES")
     lines.extend(["END DESIGN", ""])
     path.write_text("\n".join(lines), encoding="utf-8")

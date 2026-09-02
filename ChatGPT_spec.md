@@ -833,6 +833,18 @@ blockage is 2 microns wide and touches the left and bottom DIEAREA boundaries.
 All coordinates are in local project microns and must be converted exactly to
 the inherited DEF DBU.
 
+Generated DEF blockage rectangles use standards-compliant syntax with no `+`
+before `RECT`:
+
+```def
+- PLACEMENT RECT ( x1 y1 ) ( x2 y2 ) ;
+- LAYER Metal2 RECT ( x1 y1 ) ( x2 y2 ) ;
+```
+
+The `+` prefix is reserved for blockage options such as `SPACING`,
+`DESIGNRULEWIDTH`, `PUSHDOWN`, `SOFT`, or `PARTIAL`; it must not prefix the
+`RECT` geometry token.
+
 The following allocation constraints are part of variant eligibility:
 
 * for EV and CV, the first allocated participant I/O must have `io_type` power

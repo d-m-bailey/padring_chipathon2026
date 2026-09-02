@@ -211,7 +211,7 @@ def test_ace2_blocks_placement_and_every_routing_layer(tmp_path):
     dp.write_text("VERSION 5.8 ;\nDESIGN ring ;\nUNITS DISTANCE MICRONS 200 ;\nEND DESIGN\n", encoding="utf-8")
     text, metadata = generate_project_def(mapping_path=mp, padring_def=dp, lef_paths=[], variant_code="ACE2")
     assert "BLOCKAGES 12 ;" in text
-    assert text.count("- PLACEMENT + RECT") == 2
+    assert text.count("- PLACEMENT RECT") == 2
     assert text.count("- LAYER Metal") == 10
     assert metadata["usable_area"] == 5_308_750
     assert metadata["blockages"][1] == [335000, 335000, 447000, 447000]
@@ -240,7 +240,7 @@ def test_variant_metal2_corner_blockages(tmp_path, variant, expected):
         mapping_path=mp, padring_def=dp, lef_paths=[], variant_code=variant
     )
     assert metadata["metal2_blockages"] == expected
-    assert text.count("- LAYER Metal2 + RECT") == len(expected)
+    assert text.count("- LAYER Metal2 RECT") == len(expected)
 
 
 def test_definitive_ace2_slot_order_and_corrected_blockage():

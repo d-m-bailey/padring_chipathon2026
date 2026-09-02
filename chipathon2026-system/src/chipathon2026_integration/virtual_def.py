@@ -466,11 +466,11 @@ def generate_project_def(
     if blockage_count:
         lines.append(f"BLOCKAGES {blockage_count} ;")
         for x1, y1, x2, y2 in blockage_rects:
-            lines.append(f"- PLACEMENT + RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
+            lines.append(f"- PLACEMENT RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
             for layer in routing_layers:
-                lines.append(f"- LAYER {layer} + RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
+                lines.append(f"- LAYER {layer} RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
         for x1, y1, x2, y2 in metal2_blockage_rects:
-            lines.append(f"- LAYER Metal2 + RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
+            lines.append(f"- LAYER Metal2 RECT ( {x1} {y1} ) ( {x2} {y2} ) ;")
         lines.append("END BLOCKAGES")
     lines.extend(["END DESIGN", ""])
 

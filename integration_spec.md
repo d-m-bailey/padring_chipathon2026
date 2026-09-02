@@ -441,6 +441,17 @@ placement transforms must agree exactly after unit conversion.
 The integrated DEF must not silently discard a canonical project blockage or
 move a project to satisfy spacing.
 
+Both copied/transformed and newly emitted blockage geometry must use DEF
+`RECT` syntax without a `+` prefix, for example:
+
+```def
+- PLACEMENT RECT ( x1 y1 ) ( x2 y2 ) ;
+- LAYER Metal2 RECT ( x1 y1 ) ( x2 y2 ) ;
+```
+
+The full-chip blockage reader must parse this standards-compliant form. It
+must not require or generate the invalid legacy form `+ RECT`.
+
 ## 13. Structural Verilog
 
 Generate:

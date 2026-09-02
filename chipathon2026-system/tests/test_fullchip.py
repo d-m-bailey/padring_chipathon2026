@@ -5,6 +5,7 @@ import pytest
 
 from chipathon2026_integration.errors import ConfigError
 from chipathon2026_integration.fullchip import (
+    BLOCKAGE_RE,
     BaseChipDefinition,
     BaseVariantGeometry,
     ChipRequest,
@@ -114,6 +115,14 @@ def test_transform_box_normalizes_reflections():
 def test_prefix_is_case_insensitive():
     assert prefix_name("A01", "DATA") == "A01_DATA"
     assert prefix_name("A01", "a01_DATA") == "a01_DATA"
+
+
+def test_fullchip_blockage_parser_accepts_def_rect_syntax_without_plus():
+    placement = BLOCKAGE_RE.fullmatch("- PLACEMENT RECT ( 0 0 ) ( 20 30 ) ;")
+    routing = BLOCKAGE_RE.fullmatch("- LAYER Metal2 RECT ( 1 2 ) ( 21 32 ) ;")
+    assert placement is not None and placement.group("placement") == "PLACEMENT"
+    assert routing is not None and routing.group("layer") == "Metal2"
+    assert BLOCKAGE_RE.fullmatch("- LAYER Metal2 + RECT ( 1 2 ) ( 21 32 ) ;") is None
 
 
 def test_chip_padring_merges_project_and_keeps_boundaries(tmp_path: Path):
