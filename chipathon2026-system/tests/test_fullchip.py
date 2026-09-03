@@ -20,6 +20,7 @@ from chipathon2026_integration.fullchip import (
     write_top_verilog,
 )
 from chipathon2026_integration.constants import IO_CELLS
+from chipathon2026_integration.fullchip_cli import main as fullchip_main
 from chipathon2026_integration.virtual_def import BLOCK_VARIANTS
 
 
@@ -69,6 +70,18 @@ projects:
     assert request.name == "demo_chip"
     assert request.base_chip.path == (tmp_path / "base.yaml").resolve()
     assert request.projects == (ProjectRequest("A01", "A", "NE"),)
+
+
+def test_fullchip_rejects_noncanonical_destination_dbu(tmp_path: Path):
+    assert fullchip_main([
+        str(tmp_path / "integration.yaml"),
+        "--padring", str(tmp_path / "padring"),
+        "--tech-pdk", str(tmp_path / "pdk"),
+        "--output-root", str(tmp_path / "output"),
+        "--def-dbu", "0.001",
+    ]) == 1
+    report = (tmp_path / "output/integration_validation.json").read_text(encoding="utf-8")
+    assert "requires --def-dbu 0.005" in report
 
 
 def test_base_chip_rejects_duplicate_io_type(tmp_path: Path):

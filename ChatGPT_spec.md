@@ -1044,6 +1044,19 @@ INFO\_DIR and all build/tool/PDK paths must remain overrideable Make variables.
 DEF\_DBU defaults to 0.005 microns and must remain overrideable. The generated
 DEF therefore uses UNITS DISTANCE MICRONS 200, and the KLayout import/output DBU
 must be set to the same value.
+When assembling a combined chip from project GDS files, each source GDS must be
+read into its own `pya.Layout` so its declared source DBU is preserved. The
+destination chip layout is created from the integrated DEF at 0.005 microns per
+database unit (`UNITS DISTANCE MICRONS 200`). Copy each source hierarchy into
+its DEF-created destination project cell with KLayout `copy_tree`, allowing
+KLayout to convert between source and destination DBUs. Do not read project GDS
+files directly into the destination layout, assume a common source DBU,
+manually rescale integer geometry, or create a duplicate project placement in
+addition to the DEF component.
+When the integrated GDS adds top-level project-pin text from the authoritative
+pin CSV, suppress or remove text created by the DEF reader on that label layer
+first. The final top cell must contain exactly one label per CSV row at the CSV
+pad-center coordinate, not both a DEF-derived label and a CSV-derived label.
 PAD\_MARKER\_LAYER and PAD\_MARKER\_DATATYPE must also be overrideable Make
 variables. Their GF180 defaults are 37 and 0 respectively; other processes may
 identify the physical pad-center marker on a different GDS layer/datatype pair.

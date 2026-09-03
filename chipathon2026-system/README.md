@@ -21,6 +21,12 @@ Use the `validate` target to inspect project GDS PR boundaries, variant
 eligibility, transformed placement, spacing, and pad-slot ownership without
 running padring or producing the integrated GDS.
 
+Full-chip GDS assembly uses the integrated DEF as the placement authority and
+requires `UNITS DISTANCE MICRONS 200`. The final layout DBU is 0.005 microns.
+Each padring/project GDS is read into a separate KLayout database and copied
+into its DEF-created destination cell so KLayout converts differing source
+DBUs without flattening the hierarchy.
+
 ## What is implemented
 
 - Parse and validate participant `info.yaml`.

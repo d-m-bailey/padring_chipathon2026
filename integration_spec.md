@@ -365,12 +365,26 @@ boundaries, measured separation, and pass/fail result. It must report all
 detected conflicts in one run where practical rather than stopping after the
 first pair.
 
-## 10. Project GDS libraries and cell naming
+## 10. Project GDS isolation and cell naming
 
-Each project GDS is loaded as its own KLayout library named from the normalized
-team code. Project hierarchies remain separate while composing the integrated
-layout, preventing same-named participant subcells from being accidentally
-shared.
+Each project GDS is read into a new, separate `pya.Layout`. It must never be
+read directly into the destination chip layout. The source layout retains the
+DBU declared by that GDS, so projects with different source DBUs remain
+independent during import.
+
+For each source, require exactly one top cell. Create or resolve the
+team-prefixed destination project cell corresponding to the component already
+created by the integrated DEF, then copy the source hierarchy with
+`destination_project.copy_tree(source_top)`. KLayout performs source-to-
+destination DBU conversion during this cross-layout copy. Do not manually
+rescale integer source coordinates and do not place a second project instance
+in addition to the instance created from DEF.
+
+Project hierarchies must remain logically separate while composing the
+integrated layout. Before or during `copy_tree`, apply an explicit destination
+cell-name mapping so a source subcell cannot be merged with an unrelated
+same-named cell already in the destination. Participant hierarchy cells are
+team-namespaced when necessary, and the final mapping is recorded.
 
 Team-code matching is case-insensitive. Each project top cell in the integrated
 copy must begin with its team code. If it does not, rename the integrated copy
@@ -384,10 +398,9 @@ The top-cell rename map records:
 - integrated top-cell name; and
 - final exported top-cell name.
 
-For tapeout GDS export, disable KLayout cell-context saving so library proxies
-are written as ordinary cells. The subsystem must not assume that a displayed
-qualified name such as `Library.Cell` is the actual exported GDS name. After
-writing, reopen the exported GDS and validate that:
+For tapeout GDS export, disable KLayout cell-context saving. No project library
+proxy or context cell is permitted in the destination or exported hierarchy.
+After writing, reopen the exported GDS and validate that:
 
 - every cell has a globally unique stream name;
 - each project instance resolves to the intended hierarchy;
@@ -398,9 +411,35 @@ writing, reopen the exported GDS and validate that:
 The placement manifest records KLayout's final cell-name mapping, including any
 automatic uniqueness suffixes.
 
-## 11. Integrated GDS
+## 11. Integrated GDS and DBU conversion
 
 The integrated GDS top cell is exactly `<chip_name>`.
+
+The final destination KLayout database has `layout.dbu = 0.005` microns, which
+is 200 database units per micron. The integrated DEF must therefore contain
+`UNITS DISTANCE MICRONS 200`. A mismatch is a fatal error; the final GDS DBU is
+not overrideable in this initial profile.
+
+Create the destination chip layout and its `<chip_name>` top cell by reading
+the integrated top-level DEF with the required LEFs into this canonical
+0.005-micron layout. The DEF is authoritative for top-level component
+placements and orientations. Populate the DEF-created padring and project
+component cells by copying their GDS hierarchies into those destination cells.
+
+The required project import sequence is:
+
+1. Create a fresh source `pya.Layout` for one project.
+2. Read only that project's GDS into the source layout and retain its original
+   `source.dbu`.
+3. Require exactly one source top cell.
+4. Resolve the project cell created in the destination by the integrated DEF.
+5. Call `destination_project.copy_tree(source_top)` using an explicit,
+   collision-safe cell mapping where required.
+6. Verify that physical dimensions in microns are unchanged by the copy and
+   that the DEF-created instance remains the sole top-level project instance.
+
+Repeat with a new source layout for every project. Never reuse a source layout
+and never infer that all source GDS files use the same DBU.
 
 It contains:
 
@@ -419,6 +458,11 @@ The text location is the physical-pad center used by the chip pin CSV. The text
 layer/texttype is the I/O-cell Metal5 label layer, default `81/10`, and is
 overrideable by command-line or Makefile parameters. The integrated GDS and CSV
 must use the same resolved name and coordinates.
+
+DEF-reader-generated top-level pin text on this layer must be suppressed or
+removed before inserting the CSV-derived labels. The final top cell contains
+exactly one text object per CSV row, at the CSV coordinate; it must not retain
+a second DEF-derived copy at the DEF pin-geometry coordinate.
 
 Reject case-insensitive collisions between final top-level project pin names.
 
@@ -522,6 +566,8 @@ The machine-readable manifest records at least:
 - the resolved origin and size of every selected block variant;
 - all resolved input and output paths;
 - project team, variant, quadrant, pin count, and measured PR boundary;
+- each source GDS DBU, the destination `0.005`-micron DBU, and the verified
+  source/destination physical bounding boxes;
 - canonical and transformed PR boundaries;
 - exact DEF and GDS transforms;
 - canonical-to-physical I/O-slot mapping;
@@ -554,7 +600,9 @@ reports:
 - per-pad quadrant/side orientation and bounding-box invariance;
 - project pin-name collision checks;
 - DEF/GDS/Verilog instance consistency;
-- GDS library and exported cell-name uniqueness;
+- imported hierarchy and exported cell-name uniqueness;
+- source-GDS DBU preservation, cross-layout DBU conversion, and final
+  `0.005`-micron DBU validation;
 - padring generation and project-boundary breaks;
 - GDS text/CSV name and coordinate consistency; and
 - output existence and top-cell/module naming.

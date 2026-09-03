@@ -115,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     chip = None
     try:
+        if abs(args.def_dbu - 0.005) > 1e-12:
+            raise ConfigError("full-chip integration requires --def-dbu 0.005 (200 DBU per micron)")
         chip = load_chip_request(args.integration_yaml, base_chip_override=args.base_chip)
         output = args.output_root
         output.mkdir(parents=True, exist_ok=True)
@@ -225,6 +227,9 @@ def main(argv: list[str] | None = None) -> int:
             "chip_diearea_microns": [str(value) for value in chip.diearea],
             "dbu_microns": str(args.def_dbu), "padring_gds": str(ring_gds),
             "padring_top": f"{chip.name}_padring", "pin_csv": str(pin_csv),
+            "integrated_def": str(integrated_def),
+            "lef_files": [str(path) for path in lef_paths],
+            "tech_file": str(tech_file), "layer_map": str(layer_map),
             "pin_text_layer": args.pin_text_layer, "pin_text_datatype": args.pin_text_datatype,
             "cell_name_map": str(cell_map), "projects": placement_docs,
         }
@@ -235,7 +240,18 @@ def main(argv: list[str] | None = None) -> int:
             "-rd", f"manifest={gds_manifest_path}", "-rd", f"output={integrated_gds}",
             "-r", str(args.gds_script),
         ], "integrated GDS assembly")
-        outputs = [cfg_path, map_yaml, map_json, ring_def, ring_verilog, ring_gds, pin_csv, integrated_def, top_verilog, integrated_gds, report_json, report_text]
+        cell_name_data = json.loads(cell_map.read_text(encoding="utf-8"))
+        dbu_conversion = cell_name_data.get("dbu_conversion")
+        if not isinstance(dbu_conversion, dict):
+            raise ConfigError("integrated GDS assembly did not report DBU conversion results")
+        validation["checks"]["source_and_destination_dbu_conversion"] = "pass"
+        validation["dbu_conversion"] = dbu_conversion
+        json_dump(report_json, validation)
+        outputs = [
+            cfg_path, map_yaml, map_json, ring_def, ring_verilog, ring_gds,
+            pin_csv, integrated_def, top_verilog, integrated_gds, cell_map,
+            gds_manifest_path, report_json, report_text,
+        ]
         manifest = {
             "schema_version": 1, "chip_name": chip.name,
             "base_chip_name": chip.base_chip.name,
@@ -245,6 +261,8 @@ def main(argv: list[str] | None = None) -> int:
             "io_cells": chip.io_cells,
             "minimum_project_gap_microns": str(chip.minimum_gap), "projects": placement_docs,
             "pad_orientations": orientation_records,
+            "destination_dbu_microns": "0.005",
+            "dbu_conversion": dbu_conversion,
             "pin_count": len(pin_rows), "pin_text_layer": [args.pin_text_layer, args.pin_text_datatype],
             "validation_report": str(report_json),
             "inputs": {
